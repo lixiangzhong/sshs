@@ -9,13 +9,13 @@ import (
 )
 
 var UItemplates = &promptui.SelectTemplates{
-	Label:    "✨ {{ . | cyan}}",
+	Label:    "{{ . | cyan}}",
 	Active:   "➤ {{ .DisplayName | yellow  }}",
 	Inactive: "  {{.DisplayName | faint}} ",
 }
 
 func UISelect() Config {
-	cfg, err := LoadConfig(configFileList("sshs.yaml")...)
+	cfg, err := LoadConfig(configFileList(".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml")...)
 	if err != nil {
 		log.Fatal(err)
 	}

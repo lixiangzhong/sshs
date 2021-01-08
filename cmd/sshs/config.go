@@ -69,10 +69,12 @@ func (c Config) DisplayName() string {
 	return fmt.Sprintf("%v\t%v", c.Name, c.Host)
 }
 
-func configFileList(name string) []string {
+func configFileList(names ...string) []string {
 	var filenames []string
-	filenames = append(filenames, name)
-	filenames = append(filenames, filepath.Join(homeDir(), name))
+	for _, name := range names {
+		filenames = append(filenames, name)
+		filenames = append(filenames, filepath.Join(homeDir(), name))
+	}
 	return filenames
 }
 

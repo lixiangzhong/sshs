@@ -14,8 +14,9 @@ var cfg []Config
 func main() {
 	log.SetFlags(0)
 	app := &cli.App{
-		Name:  "sshs",
-		Usage: "make ssh scp easy",
+		Name:      "sshs",
+		Usage:     "make ssh scp easy",
+		UsageText: "sshs [flags] [command] [args...]",
 		Action: func(c *cli.Context) error {
 			client, err := ChooseHost()
 			if err != nil {
@@ -29,9 +30,10 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name:    "scp",
-				Aliases: []string{"cp"},
-				Usage:   "scp file or dir",
+				Name:      "scp",
+				Aliases:   []string{"cp"},
+				Usage:     "scp transfer file or dir",
+				UsageText: "scp [-r] <src> <dst> (example: scp -r localdir :/remotedir)",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:    "r",

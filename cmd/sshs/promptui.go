@@ -14,14 +14,6 @@ var UItemplates = &promptui.SelectTemplates{
 	Inactive: "  {{.DisplayName | faint}} ",
 }
 
-func UISelect() Config {
-	cfg, err := LoadConfig(configFileList(".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml")...)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return uiSelect(nil, cfg)
-}
-
 func uiSelect(parent, children []Config) Config {
 	ui := promptui.Select{
 		Label:        "select",

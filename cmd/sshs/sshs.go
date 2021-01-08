@@ -12,7 +12,7 @@ import (
 var cfg []Config
 
 func main() {
-	log.SetFlags(log.Lshortfile)
+	log.SetFlags(0)
 	app := &cli.App{
 		Name:  "sshs",
 		Usage: "make ssh scp easy",
@@ -70,4 +70,12 @@ func main() {
 func ChooseHost() (*ssh.Client, error) {
 	host := UISelect()
 	return secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)
+}
+
+func UISelect() Config {
+	cfg, err := LoadConfig(configFileList(".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml")...)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return uiSelect(nil, cfg)
 }

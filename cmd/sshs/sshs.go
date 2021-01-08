@@ -63,19 +63,22 @@ func main() {
 	}
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 }
 
 func ChooseHost() (*ssh.Client, error) {
-	host := UISelect()
+	host, err := UISelect()
+	if err != nil {
+		return nil, err
+	}
 	return secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)
 }
 
-func UISelect() Config {
+func UISelect() (Config, error) {
 	cfg, err := LoadConfig(configFileList(".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml")...)
 	if err != nil {
-		log.Fatal(err)
+		return Config{}, err
 	}
 	return uiSelect(nil, cfg)
 }

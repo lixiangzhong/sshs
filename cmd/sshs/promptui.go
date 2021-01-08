@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/manifoldco/promptui"
@@ -14,7 +13,7 @@ var UItemplates = &promptui.SelectTemplates{
 	Inactive: "  {{.DisplayName | faint}} ",
 }
 
-func uiSelect(parent, children []Config) Config {
+func uiSelect(parent, children []Config) (Config, error) {
 	ui := promptui.Select{
 		Label:        "select",
 		Items:        children,
@@ -33,7 +32,7 @@ func uiSelect(parent, children []Config) Config {
 	}
 	index, _, err := ui.Run()
 	if err != nil {
-		log.Fatal(err)
+		return Config{}, err
 	}
 	backToParent := "◄ back to previous"
 	c := children[index]
@@ -51,7 +50,7 @@ func uiSelect(parent, children []Config) Config {
 		}
 		return uiSelect(nil, parent)
 	}
-	return c
+	return c, nil
 }
 
 func UISearch(c Config, input string, index int) bool {

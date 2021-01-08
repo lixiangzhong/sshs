@@ -78,7 +78,7 @@ func configFileList(names ...string) []string {
 	return filenames
 }
 
-func LoadConfig(filenames ...string) ([]Config, error) {
+func loadConfig(filenames ...string) ([]Config, error) {
 	var b []byte
 	var err error
 	var cfg []Config

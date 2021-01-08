@@ -12,6 +12,7 @@ var UItemplates = &promptui.SelectTemplates{
 	Active:   "➤ {{ .DisplayName | yellow  }}",
 	Inactive: "  {{.DisplayName | faint}} ",
 }
+var root []Config
 
 func uiSelect(parent, children []Config) (Config, error) {
 	ui := promptui.Select{
@@ -46,7 +47,7 @@ func uiSelect(parent, children []Config) (Config, error) {
 	}
 	if c.Name == backToParent {
 		if parent == nil {
-			return uiSelect(nil, cfg)
+			return uiSelect(nil, root)
 		}
 		return uiSelect(nil, parent)
 	}

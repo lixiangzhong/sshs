@@ -2,7 +2,6 @@ package secureshell
 
 import (
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"sshs/file"
@@ -28,7 +27,6 @@ func barProgress(bar *progress.Bar, f file.File) readerWrapper {
 }
 
 func Scp(remote *sftp.Client, recursively bool, src string, dst string) error {
-	log.Println("debug", recursively, src, dst)
 	sendToRemote := strings.HasPrefix(dst, ":")
 	recvFromRemote := strings.HasPrefix(src, ":")
 	if sendToRemote == recvFromRemote {

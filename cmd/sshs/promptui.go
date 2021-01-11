@@ -18,7 +18,7 @@ func uiSelect(parent, children []Config) (Config, error) {
 	ui := promptui.Select{
 		Label:        "select",
 		Items:        children,
-		Size:         10,
+		Size:         15,
 		HideSelected: true,
 		Templates:    UItemplates,
 		Searcher: func(input string, index int) bool {

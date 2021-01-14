@@ -79,27 +79,27 @@ func Terminal(c *ssh.Client) error {
 		return err
 	}
 	defer session.Close()
-	stdin := int(os.Stdin.Fd())
-	state, err := terminal.MakeRaw(stdin)
+	err = xtermShell(session)
 	if err != nil {
 		return err
 	}
-	defer terminal.Restore(stdin, state)
-	err = xtermShell(session, stdin)
-	if err != nil {
-		return err
-	}
-	go resizeTerminal(session, stdin)
+	go resizeTerminal(session)
 	go sessionKeepalive(session)
 	return session.Wait()
 }
 
-func resizeTerminal(session *ssh.Session, fd int) {
+func resizeTerminal(session *ssh.Session) {
+	stdin := int(os.Stdin.Fd())
+	state, err := terminal.MakeRaw(stdin)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer terminal.Restore(stdin, state)
 	tk := time.NewTicker(time.Second)
 	defer tk.Stop()
 	var w, h int
 	for range tk.C {
-		w1, h1, err := terminal.GetSize(fd)
+		w1, h1, err := terminal.GetSize(stdin)
 		if err != nil {
 			break
 		}
@@ -125,17 +125,13 @@ func sessionKeepalive(session *ssh.Session) {
 	}
 }
 
-func xtermShell(session *ssh.Session, fd int) error {
+func xtermShell(session *ssh.Session) error {
 	modes := ssh.TerminalModes{
 		ssh.ECHO:          1,
 		ssh.TTY_OP_ISPEED: 14400,
 		ssh.TTY_OP_OSPEED: 14400,
 	}
-	w, h, err := terminal.GetSize(fd)
-	if err != nil {
-		return err
-	}
-	err = session.RequestPty("xterm", h, w, modes)
+	err := session.RequestPty("xterm", 80, 80, modes)
 	if err != nil {
 		return err
 	}
@@ -149,5 +145,9 @@ func xtermShell(session *ssh.Session, fd int) error {
 		io.Copy(pipe, os.Stdin)
 		session.Close()
 	}()
-	return session.Shell()
+	err = session.Shell()
+	if err != nil {
+		return err
+	}
+	return nil
 }

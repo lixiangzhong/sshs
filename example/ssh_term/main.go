@@ -6,12 +6,13 @@ import (
 )
 
 func main() {
-	c, err := secureshell.Dial("root", "127.0.0.1:22", secureshell.PasswordAuth("this is password"))
+	c, err := secureshell.Dial("root", "127.0.0.1:22", secureshell.PasswordAuth("123456"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = secureshell.Terminal(c)
+	t, err := secureshell.NewTerminal(c)
 	if err != nil {
 		log.Println(err)
 	}
+	t.Wait()
 }

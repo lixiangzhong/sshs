@@ -50,10 +50,11 @@ func TerminalAction(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	err = secureshell.Terminal(client)
+	t, err := secureshell.NewTerminal(client)
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
+	t.Wait()
 	return nil
 }
 

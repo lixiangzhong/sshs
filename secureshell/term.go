@@ -68,12 +68,12 @@ func (t *Term) resize() {
 			break
 		}
 		if w != t.width || h != t.height {
+			t.width = w
+			t.height = h
 			err = t.session.WindowChange(h, w)
 			if err != nil {
 				break
 			}
-			t.width = w
-			t.height = h
 		}
 	}
 }
@@ -100,7 +100,7 @@ func (t *Term) shell(c *ssh.Client) error {
 		ssh.TTY_OP_ISPEED: 14400,
 		ssh.TTY_OP_OSPEED: 14400,
 	}
-	err = s.RequestPty("xterm", t.width, t.height, modes)
+	err = s.RequestPty("xterm", t.height, t.width, modes)
 	if err != nil {
 		return err
 	}

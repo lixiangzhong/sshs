@@ -14,5 +14,8 @@ func main() {
 	if err != nil {
 		log.Println(err)
 	}
+	log.Println(t.WriteString("ip a"))
+	log.Println(t.WriteString("ls"))
+	log.Println(t.WriteString("exit"))
 	t.Wait()
 }

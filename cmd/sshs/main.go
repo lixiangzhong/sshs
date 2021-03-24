@@ -34,7 +34,17 @@ func main() {
 			{
 				Name:      "run",
 				Usage:     "run shell file",
-				UsageText: "run example.sh",
+				UsageText: "sshs run -f example.yaml",
+				Description: `
+cat example.yaml
+
+hosts:
+  - { host: 192.168.1.1, password: 123456 }
+scripts:
+  - { run: ifconfig }
+  - { scp: { src: '1.txt', dst: ':/root/1.txt' } } #same as => scp 1.txt root@192.168.1.1:/root/1.txt
+  - { run: cat 1.txt }
+`,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "f",

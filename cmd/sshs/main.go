@@ -31,6 +31,20 @@ func main() {
 				},
 				Action: SCPAction,
 			},
+			{
+				Name:      "run",
+				Usage:     "run shell file",
+				UsageText: "run example.sh",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "f",
+						Aliases:  []string{"filename", "file"},
+						Usage:    "run file script",
+						Required: true,
+					},
+				},
+				Action: RunAction,
+			},
 		},
 	}
 	err := app.Run(os.Args)

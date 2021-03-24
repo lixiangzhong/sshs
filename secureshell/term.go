@@ -1,6 +1,7 @@
 package secureshell
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -121,4 +122,10 @@ func (t *Term) shell(c *ssh.Client) error {
 	go t.resize()
 	go t.keepalive()
 	return nil
+}
+
+func (t *Term) WriteString(s string) error {
+	time.Sleep(time.Millisecond * 10)
+	_, err := fmt.Fprintln(t.stdin, s)
+	return err
 }

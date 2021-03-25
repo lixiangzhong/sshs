@@ -50,7 +50,7 @@ func (o *osfile) Chmod(mode os.FileMode) error {
 
 func (o *osfile) BodySize() int64 {
 	if o.IsDir() {
-		return 0
+		return -1
 	}
 	return o.Size()
 }

@@ -1,15 +1,17 @@
 package secureshell
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sshs/file"
-	"sshs/progress"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/pkg/sftp"
+	"github.com/schollz/progressbar/v3"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -19,8 +21,29 @@ func SftpClient(c *ssh.Client, opts ...sftp.ClientOption) (*sftp.Client, error) 
 
 type readerWrapper func(io.Reader) io.Reader
 
-func barProgress(bar *progress.Bar, f file.File) readerWrapper {
-	bar.Add(f.Name(), int(f.BodySize()))
+func barProgress(f file.File) readerWrapper {
+	bar := progressbar.NewOptions64(
+		f.BodySize(),
+		progressbar.OptionSetDescription(f.Name()),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionSetWidth(10),
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionShowCount(),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprint(os.Stderr, "\n")
+		}),
+		progressbar.OptionSpinnerType(14),
+		progressbar.OptionFullWidth(),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "=",
+			SaucerHead:    ">",
+			SaucerPadding: " ",
+			BarStart:      "|",
+			BarEnd:        "|",
+		}),
+	)
+	bar.RenderBlank()
 	return func(r io.Reader) io.Reader {
 		return io.TeeReader(f, bar)
 	}
@@ -40,8 +63,8 @@ func Scp(remote *sftp.Client, recursively bool, src string, dst string) error {
 	}
 	sftpcli := file.NewSFTPClient(remote)
 	oscli := file.NewOSClient()
-	bar := progress.NewBar()
-	defer bar.Close()
+	//bar := progress.NewBar()
+	//defer bar.Close()
 	if sendToRemote {
 		f, err := oscli.Open(src)
 		if err != nil {
@@ -54,7 +77,7 @@ func Scp(remote *sftp.Client, recursively bool, src string, dst string) error {
 				return errors.New(src + " is a directory")
 			}
 		}
-		return scp(sftpcli, f, dst, barProgress(bar, f))
+		return scp(sftpcli, f, dst, barProgress(f))
 	} else {
 		f, err := sftpcli.Open(src)
 		if err != nil {
@@ -67,7 +90,7 @@ func Scp(remote *sftp.Client, recursively bool, src string, dst string) error {
 				return errors.New(src + " is a directory")
 			}
 		}
-		return scp(oscli, f, dst, barProgress(bar, f))
+		return scp(oscli, f, dst, barProgress(f))
 	}
 }
 
@@ -99,8 +122,6 @@ func scpDir(dstclient file.Client, source file.File, target string) error {
 	if !source.IsDir() {
 		return errors.New(source.Name() + " not a directory")
 	}
-	bar := progress.NewBar()
-	defer bar.Close()
 	base := source.Name()
 	err := source.Walk(func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -117,7 +138,7 @@ func scpDir(dstclient file.Client, source file.File, target string) error {
 			return err
 		}
 		remote := filepath.Join(target, rel)
-		return scp(dstclient, src, remote, barProgress(bar, src))
+		return scp(dstclient, src, remote, barProgress(src))
 	})
 	return err
 }

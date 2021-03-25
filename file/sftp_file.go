@@ -57,7 +57,7 @@ func (s *sftpFile) Chmod(mode os.FileMode) error {
 
 func (s *sftpFile) BodySize() int64 {
 	if s.IsDir() {
-		return 0
+		return -1
 	}
 	return s.Size()
 }

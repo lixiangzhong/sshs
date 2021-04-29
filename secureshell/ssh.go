@@ -13,6 +13,12 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+type DialConfig struct {
+	Username    string
+	Host        string
+	AuthMethods []ssh.AuthMethod
+}
+
 func Dial(username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
 	cfg := &ssh.ClientConfig{
 		User:            username,
@@ -21,6 +27,25 @@ func Dial(username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, err
 		Timeout:         10 * time.Second,
 	}
 	return ssh.Dial("tcp", host, cfg)
+}
+
+func JumperDial(c *ssh.Client, username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
+	cfg := &ssh.ClientConfig{
+		User:            username,
+		Auth:            append([]ssh.AuthMethod{keyboardInteractive()}, authmethod...),
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+	conn, err := c.Dial("tcp", host)
+	if err != nil {
+		return nil, err
+	}
+	cc, newCh, reqCh, err := ssh.NewClientConn(conn, host, cfg)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return ssh.NewClient(cc, newCh, reqCh), nil
 }
 
 var (

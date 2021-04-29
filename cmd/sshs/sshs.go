@@ -13,6 +13,24 @@ func ChooseHost(keyword ...string) (*ssh.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	jumper := host.Jumper
+	var c *ssh.Client
+	if jumper != nil {
+		c, err = secureshell.Dial(jumper.Username(), jumper.RemoteAddr(), jumper.AuthMethod()...)
+		if err != nil {
+			return nil, err
+		}
+		jumper = jumper.Jumper
+		for jumper != nil {
+			c, err = secureshell.JumperDial(c, jumper.Username(), jumper.RemoteAddr(), jumper.AuthMethod()...)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if c != nil {
+		return secureshell.JumperDial(c, host.Username(), host.RemoteAddr(), host.AuthMethod()...)
+	}
 	return secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)
 }
 

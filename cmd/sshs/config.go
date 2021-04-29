@@ -24,6 +24,7 @@ type Config struct {
 	Passphrase string   `yaml:"passphrase"`
 	Password   string   `yaml:"password"`
 	Children   []Config `yaml:"children"`
+	Jumper     *Config  `yaml:"jumper"`
 	//CMD        []string `yaml:"cmd"`
 }
 

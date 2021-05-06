@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"sshs/secureshell"
 	"strings"
 	"time"
@@ -19,8 +20,9 @@ type runConfig struct {
 }
 
 type Script struct {
-	Run string `yaml:"run"`
-	Scp struct {
+	Run      string `yaml:"run"`
+	LocalRun string `yaml:"local_run"`
+	Scp      struct {
 		Src string `yaml:"src"`
 		Dst string `yaml:"dst"`
 		Dir bool   `yaml:"dir"`
@@ -84,6 +86,14 @@ func runScripts(c *ssh.Client, scripts []Script) {
 				log.Println(err)
 				return
 			}
+		case v.LocalRun != "":
+			fmt.Println("local_run:", v.LocalRun)
+			err := Cmd(v.LocalRun)
+			//todo output
+			if err != nil {
+				log.Println(err)
+				return
+			}
 		default:
 			err = t.WriteString(v.Run)
 			if err != nil {
@@ -93,4 +103,18 @@ func runScripts(c *ssh.Client, scripts []Script) {
 		}
 		time.Sleep(v.sleepDuration())
 	}
+}
+
+func Cmd(s string) error {
+	args := strings.Fields(s)
+	var cmd *exec.Cmd
+	switch len(args) {
+	case 0:
+		return nil
+	case 1:
+		cmd = exec.Command(args[0])
+	default:
+		cmd = exec.Command(args[0], args[1:]...)
+	}
+	return cmd.Run()
 }

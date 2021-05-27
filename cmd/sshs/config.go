@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixiangzhong/sshs/secureshell"
+	"github.com/lixiangzhong/sshs/pkg/secureshell"
 
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v2"

@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/lixiangzhong/sshs/secureshell"
+	"github.com/lixiangzhong/sshs/pkg/secureshell"
 )
 
 func main() {

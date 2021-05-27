@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	"github.com/lixiangzhong/sshs/secureshell"
+	"github.com/lixiangzhong/sshs/pkg/secureshell"
 
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh"

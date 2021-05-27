@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lixiangzhong/sshs/copy"
+	"github.com/lixiangzhong/sshs/pkg/copy"
 
 	"github.com/pkg/sftp"
 	"github.com/spf13/afero"

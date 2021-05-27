@@ -5,9 +5,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"sshs/secureshell"
 	"strings"
 	"time"
+
+	"github.com/lixiangzhong/sshs/secureshell"
 
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh"

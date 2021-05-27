@@ -1,8 +1,9 @@
 package main
 
 import (
-	"sshs/secureshell"
 	"strings"
+
+	"github.com/lixiangzhong/sshs/secureshell"
 
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh"

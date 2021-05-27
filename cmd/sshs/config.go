@@ -7,9 +7,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sshs/secureshell"
 	"strconv"
 	"strings"
+
+	"github.com/lixiangzhong/sshs/secureshell"
 
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v2"

@@ -3,8 +3,9 @@ package secureshell
 import (
 	"os"
 	"path/filepath"
-	"sshs/copy"
 	"strings"
+
+	"github.com/lixiangzhong/sshs/copy"
 
 	"github.com/pkg/sftp"
 	"github.com/spf13/afero"

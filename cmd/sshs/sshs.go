@@ -76,22 +76,3 @@ func TerminalAction(c *cli.Context) error {
 	t.Wait()
 	return nil
 }
-
-func SCPAction(c *cli.Context) error {
-	if c.Args().Len() != 2 {
-		return cli.Exit("need 2 args <src> <dst>", 1)
-	}
-	client, err := ChooseHost()
-	if err != nil {
-		return err
-	}
-	sc, err := secureshell.SftpClient(client)
-	if err != nil {
-		return cli.Exit(err, 1)
-	}
-	err = secureshell.Scp(sc, c.Bool("r"), c.Args().Get(0), c.Args().Get(1))
-	if err != nil {
-		return cli.Exit(err, 1)
-	}
-	return nil
-}

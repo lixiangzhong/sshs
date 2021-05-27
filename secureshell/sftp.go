@@ -1,17 +1,14 @@
 package secureshell
 
 import (
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"sshs/file"
+	"sshs/copy"
 	"strings"
-	"time"
 
-	"github.com/pkg/errors"
 	"github.com/pkg/sftp"
-	"github.com/schollz/progressbar/v3"
+	"github.com/spf13/afero"
+	"github.com/spf13/afero/sftpfs"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -19,126 +16,29 @@ func SftpClient(c *ssh.Client, opts ...sftp.ClientOption) (*sftp.Client, error) 
 	return sftp.NewClient(c, opts...)
 }
 
-type readerWrapper func(io.Reader) io.Reader
-
-func barProgress(f file.File) readerWrapper {
-	bar := progressbar.NewOptions64(
-		f.BodySize(),
-		progressbar.OptionSetDescription(f.Name()),
-		progressbar.OptionSetWriter(os.Stderr),
-		progressbar.OptionShowBytes(true),
-		progressbar.OptionSetWidth(10),
-		progressbar.OptionThrottle(65*time.Millisecond),
-		progressbar.OptionShowCount(),
-		progressbar.OptionOnCompletion(func() {
-			fmt.Fprint(os.Stderr, "\n")
-		}),
-		progressbar.OptionSpinnerType(14),
-		progressbar.OptionFullWidth(),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "=",
-			SaucerHead:    ">",
-			SaucerPadding: " ",
-			BarStart:      "|",
-			BarEnd:        "|",
-		}),
-	)
-	bar.RenderBlank()
-	return func(r io.Reader) io.Reader {
-		return io.TeeReader(f, bar)
-	}
-}
-
 func Scp(remote *sftp.Client, recursively bool, src string, dst string) error {
-	sendToRemote := strings.HasPrefix(dst, ":")
-	recvFromRemote := strings.HasPrefix(src, ":")
-	if sendToRemote == recvFromRemote {
-		return errors.New("invalid: src and dst")
-	}
-	if idx := strings.LastIndex(src, ":"); idx >= 0 {
-		src = src[idx+1:]
-	}
-	if idx := strings.LastIndex(dst, ":"); idx >= 0 {
-		dst = dst[idx+1:]
-	}
-	sftpcli := file.NewSFTPClient(remote)
-	oscli := file.NewOSClient()
-	//bar := progress.NewBar()
-	//defer bar.Close()
-	if sendToRemote {
-		f, err := oscli.Open(src)
-		if err != nil {
-			return err
-		}
-		if f.IsDir() {
-			if recursively {
-				return scpDir(sftpcli, f, dst)
-			} else {
-				return errors.New(src + " is a directory")
-			}
-		}
-		return scp(sftpcli, f, dst, barProgress(f))
-	} else {
-		f, err := sftpcli.Open(src)
-		if err != nil {
-			return err
-		}
-		if f.IsDir() {
-			if recursively {
-				return scpDir(oscli, f, dst)
-			} else {
-				return errors.New(src + " is a directory")
-			}
-		}
-		return scp(oscli, f, dst, barProgress(f))
-	}
-}
-
-func scp(dstclient file.Client, src file.File, dst string, rwraper ...readerWrapper) error {
-	if src.IsDir() {
-		return dstclient.MkdirAll(dst, src.Mode())
-	} else {
-		if strings.HasSuffix(dst, "/") {
-			dst = filepath.Join(dst, filepath.Base(src.Name()))
-		}
-	}
-	f, err := dstclient.Create(dst)
+	workdir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	var r io.Reader = src
-	for _, wrap := range rwraper {
-		r = wrap(r)
-	}
-	_, err = io.Copy(f, r)
-	if err != nil {
-		return err
-	}
-	return f.Chmod(src.Mode())
-}
-
-func scpDir(dstclient file.Client, source file.File, target string) error {
-	if !source.IsDir() {
-		return errors.New(source.Name() + " not a directory")
-	}
-	base := source.Name()
-	err := source.Walk(func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	var cp copy.Copy
+	if strings.Contains(src, ":") { //remote to local
+		src = src[1:]
+		cp = copy.New(sftpfs.New(remote), afero.NewOsFs())
+		if !filepath.IsAbs(dst) {
+			dst = filepath.Join(workdir, dst)
 		}
-		src, err := source.Client().Open(path)
-		if err != nil {
-			return err
+	} else {
+		dst = dst[1:]
+		cp = copy.New(afero.NewOsFs(), sftpfs.New(remote))
+		if !filepath.IsAbs(src) {
+			src = filepath.Join(workdir, src)
 		}
-		defer src.Close()
-
-		rel, err := filepath.Rel(base, path)
-		if err != nil {
-			return err
-		}
-		remote := filepath.Join(target, rel)
-		return scp(dstclient, src, remote, barProgress(src))
-	})
+	}
+	if recursively { //传输目录
+		err = cp.Dir(src, dst, copy.ProgressBar())
+	} else {
+		err = cp.File(src, dst, copy.ProgressBar())
+	}
 	return err
 }

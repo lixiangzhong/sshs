@@ -5,7 +5,9 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"time"
 
+	"github.com/k0kubun/go-ansi"
 	"github.com/spf13/afero"
 
 	"github.com/schollz/progressbar/v3"
@@ -38,8 +40,7 @@ func (s *Copy) File(src, dst string, opts ...Option) error {
 		return err
 	}
 	defer dstf.Close()
-	var r io.Reader
-	r = bufio.NewReader(srcf)
+	var r io.Reader = bufio.NewReader(srcf)
 	for _, op := range opts {
 		r = op(r, srcfi)
 	}
@@ -76,7 +77,27 @@ type Option func(io.Reader, fs.FileInfo) io.Reader
 
 func ProgressBar() Option {
 	return func(r io.Reader, fi fs.FileInfo) io.Reader {
-		bar := progressbar.DefaultBytes(fi.Size(), fi.Name())
+		//bar := progressbar.DefaultBytes(fi.Size(), fi.Name())
+		bar := progressbar.NewOptions64(fi.Size(),
+			progressbar.OptionSetDescription("[cyan]"+fi.Name()+"[reset]"),
+			progressbar.OptionEnableColorCodes(true),
+			progressbar.OptionSetWriter(ansi.NewAnsiStdout()),
+			progressbar.OptionShowBytes(true),
+			progressbar.OptionThrottle(65*time.Millisecond),
+			progressbar.OptionFullWidth(),
+			progressbar.OptionShowCount(),
+			progressbar.OptionOnCompletion(func() {
+				os.Stdout.WriteString("\n")
+			}),
+			progressbar.OptionSetTheme(progressbar.Theme{
+				Saucer:        "[green]=[reset]",
+				SaucerHead:    "[yellow]>[reset]",
+				SaucerPadding: " ",
+				BarStart:      "[",
+				BarEnd:        "]",
+			}),
+			progressbar.OptionSetRenderBlankState(true),
+		)
 		rr := progressbar.NewReader(r, bar)
 		return &rr
 	}

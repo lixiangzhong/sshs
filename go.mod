@@ -13,4 +13,4 @@ require (
 	gopkg.in/yaml.v2 v2.2.3
 )
 
-replace github.com/spf13/afero => github.com/lixiangzhong/afero v1.6.1-0.20210527074456-5dc5331f477a
+replace github.com/spf13/afero => github.com/lixiangzhong/afero v1.6.1-0.20210608025232-5b44be244d8a

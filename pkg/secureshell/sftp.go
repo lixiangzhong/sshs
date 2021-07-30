@@ -1,6 +1,7 @@
 package secureshell
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,7 @@ func SftpClient(c *ssh.Client, opts ...sftp.ClientOption) (*sftp.Client, error) 
 	return sftp.NewClient(c, opts...)
 }
 
-func Scp(remote *sftp.Client, recursively bool, src string, dst string) error {
+func Scp(ctx context.Context, remote *sftp.Client, recursively bool, src string, dst string) error {
 	workdir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -37,9 +38,9 @@ func Scp(remote *sftp.Client, recursively bool, src string, dst string) error {
 		}
 	}
 	if recursively { //传输目录
-		err = cp.Dir(src, dst, copy.ProgressBar())
+		err = cp.Dir(ctx, src, dst, copy.ProgressBar())
 	} else {
-		err = cp.File(src, dst, copy.ProgressBar())
+		err = cp.File(ctx, src, dst, copy.ProgressBar())
 	}
 	return err
 }

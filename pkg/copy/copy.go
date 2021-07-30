@@ -2,6 +2,7 @@ package copy
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"io/fs"
 	"os"
@@ -25,7 +26,7 @@ type Copy struct {
 	dst afero.Fs
 }
 
-func (s *Copy) File(src, dst string, opts ...Option) error {
+func (s *Copy) File(ctx context.Context, src, dst string, opts ...Option) error {
 	srcf, err := s.src.Open(src)
 	if err != nil {
 		return err
@@ -44,17 +45,36 @@ func (s *Copy) File(src, dst string, opts ...Option) error {
 	for _, op := range opts {
 		r = op(r, srcfi)
 	}
-	_, err = io.Copy(dstf, r)
+	_, err = ContextIoCopy(ctx, dstf, r)
 	if err != nil {
 		return err
 	}
 	return err
 }
 
-func (c *Copy) Dir(src, dst string, opts ...Option) error {
+func ContextIoCopy(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
+	type tmp struct {
+		n   int64
+		err error
+	}
+	ch := make(chan tmp, 1)
+	go func() {
+		n, err := io.Copy(dst, src)
+		ch <- tmp{n: n, err: err}
+		close(ch)
+	}()
+	select {
+	case tmp := <-ch:
+		return tmp.n, tmp.err
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+func (c *Copy) Dir(ctx context.Context, src, dst string, opts ...Option) error {
 	srcfs := afero.NewBasePathFs(c.src, src)
 	dstfs := afero.NewBasePathFs(c.dst, dst)
-	cc := Copy{src: srcfs, dst: dstfs}
+	cc := New(srcfs, dstfs)
 	return fs.WalkDir(afero.NewIOFS(srcfs), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -67,7 +87,7 @@ func (c *Copy) Dir(src, dst string, opts ...Option) error {
 			}
 			err = cc.dst.MkdirAll(path, fi.Mode())
 		default:
-			err = cc.File(path, path, opts...)
+			err = cc.File(ctx, path, path, opts...)
 		}
 		return err
 	})

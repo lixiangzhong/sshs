@@ -20,7 +20,7 @@ func SCPAction(c *cli.Context) error {
 	}
 	src := c.Args().Get(0)
 	dst := c.Args().Get(1)
-	err = secureshell.Scp(sc, c.Bool("r"), src, dst)
+	err = secureshell.Scp(c.Context, sc, c.Bool("r"), src, dst)
 	if err != nil {
 		return cli.Exit(err, 1)
 	}

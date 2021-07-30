@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -38,10 +40,10 @@ func (s Script) sleepDuration() time.Duration {
 	return s.Sleep
 }
 
-func RunAction(c *cli.Context) error {
+func RunAction(ctx *cli.Context) error {
 	log.SetFlags(log.Lshortfile)
 	var cfg runConfig
-	filename := c.String("filename")
+	filename := ctx.String("filename")
 	if b, err := os.ReadFile(filename); err != nil {
 		return fmt.Errorf("%v:%v", filename, err)
 	} else {
@@ -49,7 +51,14 @@ func RunAction(c *cli.Context) error {
 			return err
 		}
 	}
+	sCtx, cancel := signal.NotifyContext(ctx.Context, os.Kill, os.Interrupt)
+	defer cancel()
 	for _, host := range cfg.Hosts {
+		select {
+		case <-sCtx.Done():
+			return sCtx.Err()
+		default:
+		}
 		fmt.Println(strings.Repeat("#", 100))
 		fmt.Println("host", host.RemoteAddr())
 		fmt.Println(strings.Repeat("#", 100))
@@ -58,12 +67,12 @@ func RunAction(c *cli.Context) error {
 			log.Println(err)
 			continue
 		}
-		runScripts(c, cfg.Scripts)
+		runScripts(sCtx, c, cfg.Scripts)
 	}
 	return nil
 }
 
-func runScripts(c *ssh.Client, scripts []Script) {
+func runScripts(ctx context.Context, c *ssh.Client, scripts []Script) {
 	defer c.Close()
 	t, err := secureshell.NewTerminal(c)
 	if err != nil {
@@ -82,14 +91,14 @@ func runScripts(c *ssh.Client, scripts []Script) {
 		switch {
 		case v.Scp.Src != "" && v.Scp.Dst != "":
 			time.Sleep(time.Second)
-			err = secureshell.Scp(sclient, v.Scp.Dir, v.Scp.Src, v.Scp.Dst)
+			err = secureshell.Scp(ctx, sclient, v.Scp.Dir, v.Scp.Src, v.Scp.Dst)
 			if err != nil {
 				log.Println(err)
 				return
 			}
 		case v.LocalRun != "":
 			fmt.Println("local_run:", v.LocalRun)
-			err := Cmd(v.LocalRun)
+			err := Cmd(ctx, v.LocalRun)
 			//todo output
 			if err != nil {
 				log.Println(err)
@@ -106,16 +115,16 @@ func runScripts(c *ssh.Client, scripts []Script) {
 	}
 }
 
-func Cmd(s string) error {
+func Cmd(ctx context.Context, s string) error {
 	args := strings.Fields(s)
 	var cmd *exec.Cmd
 	switch len(args) {
 	case 0:
 		return nil
 	case 1:
-		cmd = exec.Command(args[0])
+		cmd = exec.CommandContext(ctx, args[0])
 	default:
-		cmd = exec.Command(args[0], args[1:]...)
+		cmd = exec.CommandContext(ctx, args[0], args[1:]...)
 	}
 	return cmd.Run()
 }

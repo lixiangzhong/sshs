@@ -55,6 +55,26 @@ scripts:
 				},
 				Action: RunAction,
 			},
+			{
+				Name:      "forward",
+				Usage:     "direct_tcp_ip",
+				UsageText: "sshs forward -laddr :1234 -raddr x.x.x.x:port",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "laddr",
+						Aliases:     []string{"l"},
+						Usage:       "listen local address",
+						DefaultText: ":0",
+					},
+					&cli.StringFlag{
+						Required: true,
+						Name:     "raddr",
+						Aliases:  []string{"r"},
+						Usage:    "connect to remote address",
+					},
+				},
+				Action: ForwardAction,
+			},
 		},
 	}
 	err := app.Run(os.Args)

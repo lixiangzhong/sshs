@@ -16,6 +16,7 @@ func ForwardAction(ctx *cli.Context) error {
 	}
 	laddr := ctx.String("laddr")
 	raddr := ctx.String("raddr")
+	//todo client.Listen("tcp", laddr) 远程端口转发
 	l, err := net.Listen("tcp", laddr)
 	if err != nil {
 		return cli.Exit(err, 1)

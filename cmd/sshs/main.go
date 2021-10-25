@@ -75,6 +75,26 @@ scripts:
 				},
 				Action: ForwardAction,
 			},
+			{
+				Name:      "listen",
+				Usage:     "listen remote forward to local",
+				UsageText: "sshs listen -raddr x.x.x.x:port -laddr :80",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Required: true,
+						Name:     "laddr",
+						Aliases:  []string{"l"},
+						Usage:    "forward to local address",
+					},
+					&cli.StringFlag{
+						Name:        "raddr",
+						Aliases:     []string{"r"},
+						Usage:       "listen remote address",
+						DefaultText: ":0",
+					},
+				},
+				Action: ListenAction,
+			},
 		},
 	}
 	err := app.Run(os.Args)

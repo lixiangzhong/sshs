@@ -15,7 +15,7 @@ func clientKeepAlive(c *ssh.Client) {
 	tk := time.NewTicker(time.Second * 15)
 	defer tk.Stop()
 	for range tk.C {
-		_, _, err := c.SendRequest("keepalive@openssh", false, nil)
+		_, _, err := c.SendRequest("keepalive@openssh.com", false, nil)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -64,4 +64,43 @@ func handleForwordConn(c *ssh.Client, conn net.Conn, raddr string) {
 		rconn.Close()
 	}()
 	io.Copy(conn, rconn)
+}
+
+func ListenAction(ctx *cli.Context) error {
+	client, err := ChooseHost(ctx.Args().Slice()...)
+	if err != nil {
+		return err
+	}
+	go clientKeepAlive(client)
+	laddr := ctx.String("laddr")
+	raddr := ctx.String("raddr")
+	ln, err := client.Listen("tcp", raddr)
+	if err != nil {
+		return err
+	}
+	log.Printf("%v<==%v\n", laddr, ln.Addr())
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return err
+		}
+		handleListenConn(conn, laddr)
+	}
+}
+
+func handleListenConn(rconn net.Conn, laddr string) {
+	log.Printf("%v<==%v<==%v\n", laddr, rconn.LocalAddr(), rconn.RemoteAddr())
+	defer rconn.Close()
+	lconn, err := net.Dial("tcp", laddr)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer lconn.Close()
+	go func() {
+		io.Copy(rconn, lconn)
+		lconn.Close()
+		rconn.Close()
+	}()
+	io.Copy(lconn, rconn)
 }

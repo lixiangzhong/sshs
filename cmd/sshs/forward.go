@@ -1,19 +1,34 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh"
 )
+
+func clientKeepAlive(c *ssh.Client) {
+	tk := time.NewTicker(time.Second * 15)
+	defer tk.Stop()
+	for range tk.C {
+		_, _, err := c.SendRequest("keepalive@openssh", false, nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+}
 
 func ForwardAction(ctx *cli.Context) error {
 	client, err := ChooseHost(ctx.Args().Slice()...)
 	if err != nil {
 		return err
 	}
+	go clientKeepAlive(client)
 	laddr := ctx.String("laddr")
 	raddr := ctx.String("raddr")
 	//todo client.Listen("tcp", laddr) 远程端口转发
@@ -21,8 +36,9 @@ func ForwardAction(ctx *cli.Context) error {
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
-	log.Println("listen", l.Addr())
 	defer l.Close()
+	log.Printf("%v==>[%v]==>%v\n", l.Addr(), client.RemoteAddr(), raddr)
+	//log.Println("listen", l.Addr())
 	for {
 		conn, err := l.Accept()
 		if err != nil {

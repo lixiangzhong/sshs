@@ -85,11 +85,10 @@ func (c *Copy) Dir(ctx context.Context, src, dst string, opts ...Option) error {
 			if err != nil {
 				return err
 			}
-			err = cc.dst.MkdirAll(path, fi.Mode())
+			return cc.dst.MkdirAll(path, fi.Mode())
 		default:
-			err = cc.File(ctx, path, path, opts...)
+			return cc.File(ctx, path, path, opts...)
 		}
-		return err
 	})
 }
 

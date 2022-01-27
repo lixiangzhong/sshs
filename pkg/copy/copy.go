@@ -49,7 +49,7 @@ func (s *Copy) File(ctx context.Context, src, dst string, opts ...Option) error 
 	if err != nil {
 		return err
 	}
-	return err
+	return s.dst.Chtimes(dst, srcfi.ModTime(), srcfi.ModTime())
 }
 
 func ContextIoCopy(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {

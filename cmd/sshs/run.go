@@ -97,7 +97,6 @@ func runScripts(ctx context.Context, c *ssh.Client, scripts []Script) {
 				return
 			}
 		case v.LocalRun != "":
-			fmt.Println("local_run:", v.LocalRun)
 			err := Cmd(ctx, v.LocalRun)
 			//todo output
 			if err != nil {

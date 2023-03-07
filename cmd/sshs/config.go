@@ -73,8 +73,8 @@ func (c Config) DisplayName() string {
 
 func configFileList(names ...string) []string {
 	var filenames []string
+	filenames = append(filenames, names...)
 	for _, name := range names {
-		filenames = append(filenames, name)
 		filenames = append(filenames, filepath.Join(homeDir(), name))
 	}
 	return filenames
@@ -90,9 +90,10 @@ func loadConfig(filenames ...string) ([]Config, error) {
 			continue
 		}
 		err = yaml.Unmarshal(b, &cfg)
-		if err == nil {
-			return cfg, nil
+		if err != nil {
+			return nil, fmt.Errorf("%v: %v", filename, err)
 		}
+		return cfg, nil
 	}
 	return cfg, err
 }

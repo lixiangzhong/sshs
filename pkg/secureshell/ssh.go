@@ -3,7 +3,6 @@ package secureshell
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"syscall"
@@ -96,83 +95,4 @@ func keyboardInteractive() ssh.AuthMethod {
 		return answers, nil
 	})
 	return auth
-}
-
-func Terminal(c *ssh.Client) error {
-	session, err := c.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.Close()
-	err = xtermShell(session)
-	if err != nil {
-		return err
-	}
-	go resizeTerminal(session)
-	go sessionKeepalive(session)
-	return session.Wait()
-}
-
-func resizeTerminal(session *ssh.Session) {
-	stdin := int(os.Stdin.Fd())
-	state, err := terminal.MakeRaw(stdin)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer terminal.Restore(stdin, state)
-	tk := time.NewTicker(time.Second)
-	defer tk.Stop()
-	var w, h int
-	for range tk.C {
-		w1, h1, err := terminal.GetSize(stdin)
-		if err != nil {
-			break
-		}
-		if w1 != w || h1 != h {
-			err = session.WindowChange(h, w)
-			if err != nil {
-				break
-			}
-			w = w1
-			h = h1
-		}
-	}
-}
-
-func sessionKeepalive(session *ssh.Session) {
-	tk := time.NewTicker(time.Second * 15)
-	defer tk.Stop()
-	for range tk.C {
-		_, err := session.SendRequest("keepalive@openssh.com", false, nil)
-		if err != nil {
-			return
-		}
-	}
-}
-
-func xtermShell(session *ssh.Session) error {
-	modes := ssh.TerminalModes{
-		ssh.ECHO:          1,
-		ssh.TTY_OP_ISPEED: 14400,
-		ssh.TTY_OP_OSPEED: 14400,
-	}
-	err := session.RequestPty("xterm", 80, 80, modes)
-	if err != nil {
-		return err
-	}
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
-	pipe, err := session.StdinPipe()
-	if err != nil {
-		return err
-	}
-	go func() {
-		io.Copy(pipe, os.Stdin)
-		session.Close()
-	}()
-	err = session.Shell()
-	if err != nil {
-		return err
-	}
-	return nil
 }

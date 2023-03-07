@@ -13,7 +13,7 @@ func main() {
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
-		Version:   "1.3.0",
+		Version:   "1.3.1",
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{

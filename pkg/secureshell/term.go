@@ -129,3 +129,64 @@ func (t *Term) WriteString(s string) error {
 	_, err := fmt.Fprintln(t.stdin, s)
 	return err
 }
+
+type TerminalSession struct {
+	session *ssh.Session
+	stdin   io.WriteCloser
+}
+
+func NewTerminalSession(c *ssh.Client) (*TerminalSession, error) {
+	t := &TerminalSession{}
+	w, h, err := terminal.GetSize(int(os.Stdin.Fd()))
+	if err != nil {
+		return nil, err
+	}
+	s, err := c.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	t.session = s
+	modes := ssh.TerminalModes{
+		ssh.ECHO:          1,
+		ssh.TTY_OP_ISPEED: 14400,
+		ssh.TTY_OP_OSPEED: 14400,
+	}
+	err = s.RequestPty("xterm", h, w, modes)
+	if err != nil {
+		return nil, err
+	}
+	t.stdin, err = s.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	s.Stdout = os.Stdout
+	s.Stderr = os.Stderr
+	err = s.Shell()
+	if err != nil {
+		return nil, err
+	}
+	go t.keepalive()
+	return t, nil
+}
+
+func (t *TerminalSession) keepalive() {
+	tk := time.NewTicker(time.Second * 15)
+	defer tk.Stop()
+	for range tk.C {
+		_, err := t.session.SendRequest("keepalive@openssh.com", false, nil)
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (t *TerminalSession) Wait() error {
+	t.session.Wait()
+	return t.session.Close()
+}
+
+func (t *TerminalSession) WriteString(s string) error {
+	time.Sleep(time.Millisecond * 10)
+	_, err := fmt.Fprintln(t.stdin, s)
+	return err
+}

@@ -45,30 +45,11 @@ func (s *Copy) File(ctx context.Context, src, dst string, opts ...Option) error 
 	for _, op := range opts {
 		r = op(r, srcfi)
 	}
-	_, err = ContextIoCopy(ctx, dstf, r)
+	_, err = io.Copy(dstf, r)
 	if err != nil {
 		return err
 	}
 	return s.dst.Chtimes(dst, srcfi.ModTime(), srcfi.ModTime())
-}
-
-func ContextIoCopy(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
-	type tmp struct {
-		n   int64
-		err error
-	}
-	ch := make(chan tmp, 1)
-	go func() {
-		n, err := io.Copy(dst, src)
-		ch <- tmp{n: n, err: err}
-		close(ch)
-	}()
-	select {
-	case tmp := <-ch:
-		return tmp.n, tmp.err
-	case <-ctx.Done():
-		return 0, ctx.Err()
-	}
 }
 
 func (c *Copy) Dir(ctx context.Context, src, dst string, opts ...Option) error {
@@ -78,6 +59,9 @@ func (c *Copy) Dir(ctx context.Context, src, dst string, opts ...Option) error {
 	return fs.WalkDir(afero.NewIOFS(srcfs), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 		switch d.IsDir() {
 		case true:

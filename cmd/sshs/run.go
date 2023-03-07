@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
 	"time"
 
@@ -44,21 +43,14 @@ func RunAction(ctx *cli.Context) error {
 	log.SetFlags(log.Lshortfile)
 	var cfg runConfig
 	filename := ctx.String("filename")
-	if b, err := os.ReadFile(filename); err != nil {
+	b, err := os.ReadFile(filename)
+	if err != nil {
 		return fmt.Errorf("%v:%v", filename, err)
-	} else {
-		if err := yaml.Unmarshal(b, &cfg); err != nil {
-			return err
-		}
 	}
-	sCtx, cancel := signal.NotifyContext(ctx.Context, os.Kill, os.Interrupt)
-	defer cancel()
+	if err := yaml.Unmarshal(b, &cfg); err != nil {
+		return err
+	}
 	for _, host := range cfg.Hosts {
-		select {
-		case <-sCtx.Done():
-			return sCtx.Err()
-		default:
-		}
 		fmt.Println(strings.Repeat("#", 100))
 		fmt.Println("host", host.RemoteAddr())
 		fmt.Println(strings.Repeat("#", 100))
@@ -67,14 +59,14 @@ func RunAction(ctx *cli.Context) error {
 			log.Println(err)
 			continue
 		}
-		runScripts(sCtx, c, cfg.Scripts)
+		runScripts(ctx.Context, c, cfg.Scripts)
 	}
 	return nil
 }
 
 func runScripts(ctx context.Context, c *ssh.Client, scripts []Script) {
 	defer c.Close()
-	t, err := secureshell.NewTerminal(c)
+	t, err := secureshell.NewTerminalSession(c)
 	if err != nil {
 		log.Println(err)
 		return

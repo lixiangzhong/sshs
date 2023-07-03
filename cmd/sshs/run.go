@@ -61,6 +61,13 @@ func RunAction(ctx *cli.Context) error {
 		}
 		runScripts(ctx.Context, c, cfg.Scripts)
 	}
+	if len(cfg.Hosts) == 0 {
+		c, err := ChooseHost()
+		if err != nil {
+			return err
+		}
+		runScripts(ctx.Context, c, cfg.Scripts)
+	}
 	return nil
 }
 

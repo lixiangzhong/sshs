@@ -28,6 +28,12 @@ func main() {
 						Usage:   "scp dir",
 						Value:   false,
 					},
+					&cli.BoolFlag{
+						Name:    "gzip",
+						Aliases: []string{"gz"},
+						Usage:   "warp dst as gzip writer",
+						Value:   false,
+					},
 				},
 				Action: SCPAction,
 			},

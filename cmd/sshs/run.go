@@ -25,9 +25,10 @@ type Script struct {
 	Run      string `yaml:"run"`
 	LocalRun string `yaml:"local_run"`
 	Scp      struct {
-		Src string `yaml:"src"`
-		Dst string `yaml:"dst"`
-		Dir bool   `yaml:"dir"`
+		Src  string `yaml:"src"`
+		Dst  string `yaml:"dst"`
+		Dir  bool   `yaml:"dir"`
+		Gzip bool   `yaml:"gzip"`
 	} `yaml:"scp"`
 	Sleep time.Duration `yaml:"sleep"`
 }
@@ -90,7 +91,7 @@ func runScripts(ctx context.Context, c *ssh.Client, scripts []Script) {
 		switch {
 		case v.Scp.Src != "" && v.Scp.Dst != "":
 			time.Sleep(time.Second)
-			err = secureshell.Scp(ctx, sclient, v.Scp.Dir, v.Scp.Src, v.Scp.Dst)
+			err = secureshell.Scp(ctx, sclient, v.Scp.Gzip, v.Scp.Dir, v.Scp.Src, v.Scp.Dst)
 			if err != nil {
 				log.Println(err)
 				return

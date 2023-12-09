@@ -2,7 +2,9 @@ package copy
 
 import (
 	"bufio"
+	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -42,10 +44,12 @@ func (s *Copy) File(ctx context.Context, src, dst string, opts ...Option) error 
 	}
 	defer dstf.Close()
 	var r io.Reader = bufio.NewReader(srcf)
+	var w io.WriteCloser = dstf
 	for _, op := range opts {
-		r = op(r, srcfi)
+		w, r = op(w, r, srcfi)
+		defer w.Close()
 	}
-	_, err = io.Copy(dstf, r)
+	_, err = io.Copy(w, r)
 	if err != nil {
 		return err
 	}
@@ -76,10 +80,10 @@ func (c *Copy) Dir(ctx context.Context, src, dst string, opts ...Option) error {
 	})
 }
 
-type Option func(io.Reader, fs.FileInfo) io.Reader
+type Option func(io.WriteCloser, io.Reader, fs.FileInfo) (io.WriteCloser, io.Reader)
 
 func ProgressBar() Option {
-	return func(r io.Reader, fi fs.FileInfo) io.Reader {
+	return func(w io.WriteCloser, r io.Reader, fi fs.FileInfo) (io.WriteCloser, io.Reader) {
 		//bar := progressbar.DefaultBytes(fi.Size(), fi.Name())
 		bar := progressbar.NewOptions64(fi.Size(),
 			progressbar.OptionSetDescription("[cyan]"+fi.Name()+"[reset]"),
@@ -102,6 +106,31 @@ func ProgressBar() Option {
 			progressbar.OptionSetRenderBlankState(true),
 		)
 		rr := progressbar.NewReader(r, bar)
-		return &rr
+		return w, &rr
 	}
+}
+
+func GzipCompress() Option {
+	return func(w io.WriteCloser, r io.Reader, fi fs.FileInfo) (io.WriteCloser, io.Reader) {
+		buffer := bufio.NewWriterSize(w, 64<<10)
+		gw, err := gzip.NewWriterLevel(buffer, gzip.BestSpeed)
+		if err != nil {
+			return w, r
+		}
+		return &struct {
+			io.Writer
+			io.Closer
+		}{
+			Writer: gw,
+			Closer: CloserFunc(func() error {
+				return errors.Join(gw.Close(), buffer.Flush())
+			}),
+		}, r
+	}
+}
+
+type CloserFunc func() error
+
+func (f CloserFunc) Close() error {
+	return f()
 }

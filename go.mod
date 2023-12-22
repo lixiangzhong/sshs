@@ -10,5 +10,6 @@ require (
 	github.com/spf13/afero v1.11.0
 	github.com/urfave/cli/v2 v2.25.0
 	golang.org/x/crypto v0.16.0
+	golang.org/x/term v0.15.0
 	gopkg.in/yaml.v2 v2.2.3
 )

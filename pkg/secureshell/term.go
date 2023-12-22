@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 type TerminalOption func(*Term)
@@ -24,7 +24,7 @@ type Term struct {
 	session       *ssh.Session
 	fd            int
 	width, height int
-	state         *terminal.State
+	state         *term.State
 	stdin         io.WriteCloser
 	stdout        io.Writer
 }
@@ -36,14 +36,14 @@ func NewTerminal(c *ssh.Client, options ...TerminalOption) (*Term, error) {
 	}
 	t.fd = int(os.Stdin.Fd())
 	var err error
-	t.width, t.height, err = terminal.GetSize(t.fd)
+	t.width, t.height, err = term.GetSize(t.fd)
 	if err != nil {
 		return nil, err
 	}
 	for _, op := range options {
 		op(t)
 	}
-	t.state, err = terminal.MakeRaw(t.fd)
+	t.state, err = term.MakeRaw(t.fd)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func NewTerminal(c *ssh.Client, options ...TerminalOption) (*Term, error) {
 
 func (t *Term) Wait() error {
 	t.session.Wait()
-	err := terminal.Restore(t.fd, t.state)
+	err := term.Restore(t.fd, t.state)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (t *Term) resize() {
 	tk := time.NewTicker(time.Second)
 	defer tk.Stop()
 	for range tk.C {
-		w, h, err := terminal.GetSize(t.fd)
+		w, h, err := term.GetSize(t.fd)
 		if err != nil {
 			break
 		}
@@ -137,7 +137,7 @@ type TerminalSession struct {
 
 func NewTerminalSession(c *ssh.Client) (*TerminalSession, error) {
 	t := &TerminalSession{}
-	w, h, err := terminal.GetSize(int(os.Stdin.Fd()))
+	w, h, err := term.GetSize(int(os.Stdin.Fd()))
 	if err != nil {
 		return nil, err
 	}

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 type DialConfig struct {
@@ -85,7 +85,7 @@ func keyboardInteractive() ssh.AuthMethod {
 					return nil, err
 				}
 			} else {
-				b, err := terminal.ReadPassword(int(syscall.Stdin))
+				b, err := term.ReadPassword(int(syscall.Stdin))
 				if err != nil {
 					return nil, err
 				}

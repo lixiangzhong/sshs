@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -50,7 +49,7 @@ func (c *Config) RemoteAddr() string {
 func (c *Config) AuthMethod() []ssh.AuthMethod {
 	var auth []ssh.AuthMethod
 	if c.KeyPath != "" {
-		b, err := ioutil.ReadFile(parsePath(c.KeyPath))
+		b, err := os.ReadFile(parsePath(c.KeyPath))
 		if err != nil {
 			log.Println(err)
 		} else {
@@ -85,7 +84,7 @@ func loadConfig(filenames ...string) ([]Config, error) {
 	var err error
 	var cfg []Config
 	for _, filename := range filenames {
-		b, err = ioutil.ReadFile(parsePath(filename))
+		b, err = os.ReadFile(parsePath(filename))
 		if err != nil {
 			continue
 		}

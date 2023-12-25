@@ -52,8 +52,8 @@ func filter_unfolding(c []Config, prefix string, keyword ...string) []Config {
 			prefix := prefix + "/" + v.Name
 			result = append(result, filter_unfolding(v.Children, prefix, keyword...)...)
 		} else {
+			v.Name = prefix + "/" + v.Name
 			if containKeyword(v, keyword...) {
-				v.Name = prefix + "/" + v.Name
 				result = append(result, v)
 			}
 		}

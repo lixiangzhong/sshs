@@ -4,30 +4,35 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/manifoldco/promptui"
 )
 
 var UItemplates = &promptui.SelectTemplates{
 	Label:    "{{ . | cyan}}",
-	Active:   "➤ {{.DisplayName | yellow}}",
-	Inactive: "  {{.DisplayName | faint}} ",
+	Active:   " ➤ {{. | yellow}}",
+	Inactive: "  {{. | faint}}",
 }
 
 var root []Config
+var selector *promptui.Select
 
 func UISelect(keyword ...string) (Config, error) {
 	cfg, err := LoadConfig(keyword...)
 	if err != nil {
 		return Config{}, err
 	}
+	if len(cfg) == 1 {
+
+	}
 	root = cfg
 	return uiSelect(nil, cfg)
 }
 
 func uiSelect(parent, children []Config) (Config, error) {
-	ui := promptui.Select{
+	selector = &promptui.Select{
 		Label:        "select",
-		Items:        children,
+		Items:        asTableIndentStrings(children),
 		Size:         15,
 		HideSelected: true,
 		Templates:    UItemplates,
@@ -41,7 +46,7 @@ func uiSelect(parent, children []Config) (Config, error) {
 			return containKeyword(root, input)
 		},
 	}
-	index, _, err := ui.Run()
+	index, _, err := selector.Run()
 	if err != nil {
 		return Config{}, err
 	}
@@ -72,4 +77,20 @@ func containKeyword(c Config, keyword ...string) bool {
 		}
 	}
 	return true
+}
+
+func asTableIndentStrings(cfg []Config) []string {
+	t := table.NewWriter()
+	t.SetStyle(table.Style{
+		Box:     table.StyleBoxDefault,
+		Options: table.OptionsNoBordersAndSeparators,
+	})
+	for _, v := range cfg {
+		if len(v.Children) > 0 {
+			t.AppendRow(table.Row{v.Name, fmt.Sprintf("(%d Host)", len(v.Children))})
+		} else {
+			t.AppendRow(table.Row{v.Name, v.Host})
+		}
+	}
+	return strings.Split(t.Render(), "\n")
 }

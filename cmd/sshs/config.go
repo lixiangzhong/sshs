@@ -62,13 +62,6 @@ func (c *Config) AuthMethod() []ssh.AuthMethod {
 	return auth
 }
 
-func (c Config) DisplayName() string {
-	if len(c.Children) > 0 {
-		return fmt.Sprintf("%v (%d Host)", c.Name, len(c.Children))
-	}
-	return fmt.Sprintf("%v\t\t%v", c.Name, c.Host)
-}
-
 func configFileList(names ...string) []string {
 	var filenames []string
 	filenames = append(filenames, names...)

@@ -23,7 +23,9 @@ func UISelect(keyword ...string) (Config, error) {
 		return Config{}, err
 	}
 	if len(cfg) == 1 {
-
+		if len(cfg[0].Children) == 0 && cfg[0].Host != "" {
+			return cfg[0], nil
+		}
 	}
 	root = cfg
 	return uiSelect(nil, cfg)

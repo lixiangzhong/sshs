@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/lixiangzhong/sshs/pkg/secureshell"
 
 	"github.com/urfave/cli/v2"
@@ -36,15 +34,6 @@ func ChooseHost(keyword ...string) (*ssh.Client, error) {
 	return secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)
 }
 
-func UISelect(keyword ...string) (Config, error) {
-	cfg, err := LoadConfig(keyword...)
-	if err != nil {
-		return Config{}, err
-	}
-	root = cfg
-	return uiSelect(nil, cfg)
-}
-
 func LoadConfig(keyword ...string) ([]Config, error) {
 	cfg, err := loadConfig(configFileList(".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml")...)
 	if err != nil {
@@ -53,16 +42,23 @@ func LoadConfig(keyword ...string) ([]Config, error) {
 	if len(keyword) == 0 {
 		return cfg, nil
 	}
+	return filter_unfolding(cfg, "", keyword...), nil
+}
+
+func filter_unfolding(c []Config, prefix string, keyword ...string) []Config {
 	var result []Config
-	for _, c := range cfg {
-		for _, key := range keyword {
-			if strings.Contains(c.DisplayName(), key) {
-				result = append(result, c)
-				break
+	for _, v := range c {
+		if len(v.Children) > 0 {
+			prefix := prefix + "/" + v.Name
+			result = append(result, filter_unfolding(v.Children, prefix, keyword...)...)
+		} else {
+			if containKeyword(v, keyword...) {
+				v.Name = prefix + "/" + v.Name
+				result = append(result, v)
 			}
 		}
 	}
-	return result, nil
+	return result
 }
 
 func TerminalAction(c *cli.Context) error {

@@ -31,14 +31,12 @@ func ForwardAction(ctx *cli.Context) error {
 	go clientKeepAlive(client)
 	laddr := ctx.String("laddr")
 	raddr := ctx.String("raddr")
-	//todo client.Listen("tcp", laddr) 远程端口转发
 	l, err := net.Listen("tcp", laddr)
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
 	defer l.Close()
 	log.Printf("%v==>[%v]==>%v\n", l.Addr(), client.RemoteAddr(), raddr)
-	//log.Println("listen", l.Addr())
 	for {
 		conn, err := l.Accept()
 		if err != nil {

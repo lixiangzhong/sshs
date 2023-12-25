@@ -9,10 +9,20 @@ import (
 
 var UItemplates = &promptui.SelectTemplates{
 	Label:    "{{ . | cyan}}",
-	Active:   "➤ {{ .DisplayName | yellow  }}",
+	Active:   "➤ {{.DisplayName | yellow}}",
 	Inactive: "  {{.DisplayName | faint}} ",
 }
+
 var root []Config
+
+func UISelect(keyword ...string) (Config, error) {
+	cfg, err := LoadConfig(keyword...)
+	if err != nil {
+		return Config{}, err
+	}
+	root = cfg
+	return uiSelect(nil, cfg)
+}
 
 func uiSelect(parent, children []Config) (Config, error) {
 	ui := promptui.Select{
@@ -24,11 +34,11 @@ func uiSelect(parent, children []Config) (Config, error) {
 		Searcher: func(input string, index int) bool {
 			root := children[index]
 			for _, c := range root.Children {
-				if UISearch(c, input, index) {
+				if containKeyword(c, input) {
 					return true
 				}
 			}
-			return UISearch(root, input, index)
+			return containKeyword(root, input)
 		},
 	}
 	index, _, err := ui.Run()
@@ -54,7 +64,12 @@ func uiSelect(parent, children []Config) (Config, error) {
 	return c, nil
 }
 
-func UISearch(c Config, input string, index int) bool {
+func containKeyword(c Config, keyword ...string) bool {
 	content := fmt.Sprintf("%s %s %s", c.Name, c.Username(), c.RemoteAddr())
-	return strings.Contains(content, input)
+	for _, v := range keyword {
+		if !strings.Contains(content, v) {
+			return false
+		}
+	}
+	return true
 }

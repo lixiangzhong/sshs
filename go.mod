@@ -3,6 +3,7 @@ module github.com/lixiangzhong/sshs
 go 1.15
 
 require (
+	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.4.9
 	github.com/k0kubun/go-ansi v0.0.0-20180517002512-3bf9e2903213
 	github.com/manifoldco/promptui v0.9.0

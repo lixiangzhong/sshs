@@ -13,7 +13,7 @@ func main() {
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
-		Version:   "1.6.0",
+		Version:   "1.7.0",
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{
@@ -100,6 +100,20 @@ scripts:
 					},
 				},
 				Action: ListenAction,
+			},
+			{
+				Name:      "socks5",
+				Usage:     "socks5 proxy",
+				UsageText: "sshs socks5 -laddr 127.0.0.1:1080",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "laddr",
+						Aliases:     []string{"l"},
+						Usage:       "listen local address",
+						DefaultText: "127.0.0.1:0",
+					},
+				},
+				Action: Socks5Action,
 			},
 		},
 	}

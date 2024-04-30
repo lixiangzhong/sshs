@@ -41,6 +41,7 @@ func (s Script) sleepDuration() time.Duration {
 }
 
 func RunAction(ctx *cli.Context) error {
+	log.SetOutput(os.Stdout)
 	log.SetFlags(log.Lshortfile)
 	var cfg runConfig
 	filename := ctx.String("filename")
@@ -52,18 +53,22 @@ func RunAction(ctx *cli.Context) error {
 		return err
 	}
 	for _, host := range cfg.Hosts {
-		fmt.Println(strings.Repeat("#", 100))
-		if host.Name != "" {
-			fmt.Println(host.Name)
-		}
-		fmt.Println("host", host.RemoteAddr())
-		fmt.Println(strings.Repeat("#", 100))
-		c, err := secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		runScripts(ctx.Context, c, cfg.Scripts)
+		func(host Config) {
+			fmt.Println(strings.Repeat("↓", 100))
+			if host.Name != "" {
+				fmt.Println(host.Name)
+			}
+			fmt.Println("host", host.RemoteAddr())
+			defer fmt.Println(strings.Repeat("↑", 100))
+			c, err := secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Println(strings.Repeat("#", 100))
+			runScripts(ctx.Context, c, cfg.Scripts)
+		}(host)
+
 	}
 	if len(cfg.Hosts) == 0 {
 		c, err := ChooseHost()

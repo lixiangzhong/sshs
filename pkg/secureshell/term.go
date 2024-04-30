@@ -181,6 +181,7 @@ func (t *TerminalSession) keepalive() {
 }
 
 func (t *TerminalSession) Wait() error {
+	t.stdin.Close()
 	t.session.Wait()
 	return t.session.Close()
 }

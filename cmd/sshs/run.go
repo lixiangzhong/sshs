@@ -53,6 +53,9 @@ func RunAction(ctx *cli.Context) error {
 	}
 	for _, host := range cfg.Hosts {
 		fmt.Println(strings.Repeat("#", 100))
+		if host.Name != "" {
+			fmt.Println(host.Name)
+		}
 		fmt.Println("host", host.RemoteAddr())
 		fmt.Println(strings.Repeat("#", 100))
 		c, err := secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)

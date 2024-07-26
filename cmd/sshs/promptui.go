@@ -91,6 +91,12 @@ func asTableIndentStrings(cfg []Config) []string {
 		if len(v.Children) > 0 {
 			t.AppendRow(table.Row{v.Name, fmt.Sprintf("(%d Host)", len(v.Children))})
 		} else {
+			if v.Jumper != nil {
+				if v.Jumper.Host != "" {
+					t.AppendRow(table.Row{v.Name, fmt.Sprintf("[%s]->[%s]", v.Jumper.Host, v.Host)})
+					continue
+				}
+			}
 			t.AppendRow(table.Row{v.Name, v.Host})
 		}
 	}

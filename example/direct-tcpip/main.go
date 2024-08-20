@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/lixiangzhong/sshs/pkg/secureshell"
+	"golang.org/x/net/proxy"
 )
 
 func main() {
@@ -24,9 +25,11 @@ func main() {
 	}
 }
 
+var dialer = proxy.FromEnvironment()
+
 func handleConnIn(lconn net.Conn) {
 	defer lconn.Close()
-	c, err := secureshell.Dial("root", "127.0.0.1:22", secureshell.PasswordAuth("this is password"))
+	c, err := secureshell.Dial(dialer, "root", "127.0.0.1:22", secureshell.PasswordAuth("this is password"))
 	if err != nil {
 		log.Fatal(err)
 	}

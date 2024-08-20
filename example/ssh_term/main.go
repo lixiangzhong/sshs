@@ -4,10 +4,11 @@ import (
 	"log"
 
 	"github.com/lixiangzhong/sshs/pkg/secureshell"
+	"golang.org/x/net/proxy"
 )
 
 func main() {
-	c, err := secureshell.Dial("root", "127.0.0.1:22", secureshell.PasswordAuth("123456"))
+	c, err := secureshell.Dial(proxy.FromEnvironment(), "root", "127.0.0.1:22", secureshell.PasswordAuth("123456"))
 	if err != nil {
 		log.Fatal(err)
 	}

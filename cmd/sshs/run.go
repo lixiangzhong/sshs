@@ -13,6 +13,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
 )
 
@@ -60,7 +61,7 @@ func RunAction(ctx *cli.Context) error {
 			}
 			fmt.Println("host", host.RemoteAddr())
 			defer fmt.Println(strings.Repeat("↑", 100))
-			c, err := secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)
+			c, err := secureshell.Dial(proxy.FromEnvironment(), host.Username(), host.RemoteAddr(), host.AuthMethod()...)
 			if err != nil {
 				fmt.Println(err)
 				return

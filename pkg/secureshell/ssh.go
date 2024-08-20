@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/net/proxy"
 	"golang.org/x/term"
 )
 
@@ -18,33 +20,32 @@ type DialConfig struct {
 	AuthMethods []ssh.AuthMethod
 }
 
-func Dial(username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
-	cfg := &ssh.ClientConfig{
-		User:            username,
-		Auth:            append([]ssh.AuthMethod{keyboardInteractive()}, authmethod...),
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
-	}
-	return ssh.Dial("tcp", host, cfg)
+var (
+	_ Dialer = (*ssh.Client)(nil)
+	_ Dialer = proxy.FromEnvironment()
+)
+
+type Dialer interface {
+	Dial(network, addr string) (net.Conn, error)
 }
 
-func JumperDial(c *ssh.Client, username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
+func Dial(dialer Dialer, username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
 	cfg := &ssh.ClientConfig{
 		User:            username,
 		Auth:            append([]ssh.AuthMethod{keyboardInteractive()}, authmethod...),
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
-	conn, err := c.Dial("tcp", host)
+	conn, err := dialer.Dial("tcp", host)
 	if err != nil {
 		return nil, err
 	}
-	cc, newCh, reqCh, err := ssh.NewClientConn(conn, host, cfg)
+	cc, ch, reqch, err := ssh.NewClientConn(conn, host, cfg)
 	if err != nil {
 		conn.Close()
 		return nil, err
 	}
-	return ssh.NewClient(cc, newCh, reqCh), nil
+	return ssh.NewClient(cc, ch, reqch), nil
 }
 
 var (

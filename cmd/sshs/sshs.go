@@ -5,6 +5,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/net/proxy"
 )
 
 func ChooseHost(keyword ...string) (*ssh.Client, error) {
@@ -13,25 +14,16 @@ func ChooseHost(keyword ...string) (*ssh.Client, error) {
 		return nil, err
 	}
 	jumper := host.Jumper
-	var c *ssh.Client
+	dialer := proxy.FromEnvironment()
 	for jumper != nil {
-		if c == nil {
-			c, err = secureshell.Dial(jumper.Username(), jumper.RemoteAddr(), jumper.AuthMethod()...)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			c, err = secureshell.JumperDial(c, jumper.Username(), jumper.RemoteAddr(), jumper.AuthMethod()...)
-			if err != nil {
-				return nil, err
-			}
+		c, err := secureshell.Dial(dialer, jumper.Username(), jumper.RemoteAddr(), jumper.AuthMethod()...)
+		if err != nil {
+			return nil, err
 		}
+		dialer = c
 		jumper = jumper.Jumper
 	}
-	if c != nil {
-		return secureshell.JumperDial(c, host.Username(), host.RemoteAddr(), host.AuthMethod()...)
-	}
-	return secureshell.Dial(host.Username(), host.RemoteAddr(), host.AuthMethod()...)
+	return secureshell.Dial(dialer, host.Username(), host.RemoteAddr(), host.AuthMethod()...)
 }
 
 func LoadConfig(keyword ...string) ([]Config, error) {

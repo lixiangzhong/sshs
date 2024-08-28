@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -49,6 +50,13 @@ func RunAction(ctx *cli.Context) error {
 	b, err := os.ReadFile(filename)
 	if err != nil {
 		return fmt.Errorf("%v:%v", filename, err)
+	}
+	if strings.HasSuffix(filename, ".sh") {
+		c, err := ChooseHost()
+		if err != nil {
+			return err
+		}
+		return runShellFile(ctx.Context, c, string(b))
 	}
 	if err := yaml.Unmarshal(b, &cfg); err != nil {
 		return err
@@ -121,6 +129,35 @@ func runScripts(ctx context.Context, c *ssh.Client, scripts []Script) {
 		}
 		time.Sleep(v.sleepDuration())
 	}
+}
+
+func runShellFile(ctx context.Context, c *ssh.Client, s string) error {
+	defer c.Close()
+	sclient, err := secureshell.SftpClient(c)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	defer sclient.Close()
+	tempFilename := filepath.Join("/tmp", fmt.Sprintf(".sshs_%v.js", time.Now().UnixNano()))
+	f, err := sclient.Create(tempFilename)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	_, err = f.Write([]byte(s))
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	f.Close()
+	defer sclient.Remove(tempFilename)
+	err = sclient.Chmod(tempFilename, 0755)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return secureshell.NewTerminalRun(c, tempFilename)
 }
 
 func Cmd(ctx context.Context, s string) error {

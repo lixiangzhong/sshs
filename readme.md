@@ -32,6 +32,14 @@ vi ~/.sshs.yaml
   children:
     - { name: server4, host: 10.10.0.4, password: 123456 }
     - { name: server5, host: 10.10.0.5, password: 123456 }
+- {
+    name: server6,
+    host: 10.10.0.2,
+    port: 2222,
+    user: root,
+    password: 123456,
+    jumper: { host: 10.10.0.1, password: 123456 },
+  } #使用跳板机
 ```
 
 ## Usage
@@ -48,8 +56,14 @@ sshs cp :/tmp/1.txt 1.txt
 sshs cp -r dist :/tmp/dist
 
 
-#端口映射:在远程主机上把127.0.0.1:27017映射到本地27017
+#端口映射:在远程主机上把127.0.0.1:27017映射到本地27017(访问本地27017端口转到远程主机的27017端口)
 sshs forward -r 127.0.0.1:27017 -l :27017
+
+#端口监听转发: 在远程主机上监听80端口,并将80端口转发到本地8080端口(访问远程主机的80端口转到本地的8080端口)
+sshs listen -l 0.0.0.0:80 -l 127.0.0.1:8080
+
+#sshs socks5 连接到服务器,并启动一个socks5代理服务
+sshs socks5
 
 #批量执行脚本
 sshs run -f test.yaml
@@ -91,13 +105,14 @@ USAGE:
    sshs [flags] [command] [args...]
 
 VERSION:
-   1.4.0
+   1.8.0
 
 COMMANDS:
    scp, cp  scp transfer file or dir
    run      run shell file
    forward  direct_tcp_ip
    listen   listen remote forward to local
+   socks5   socks5 proxy
    help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:

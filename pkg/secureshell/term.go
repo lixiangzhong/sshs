@@ -191,3 +191,56 @@ func (t *TerminalSession) WriteString(s string) error {
 	_, err := fmt.Fprintln(t.stdin, s)
 	return err
 }
+
+func NewTerminalRun(c *ssh.Client, cmd string, options ...TerminalOption) error {
+	t := &Term{
+		stdout: os.Stdout,
+		wg:     new(sync.WaitGroup),
+	}
+	t.fd = int(os.Stdin.Fd())
+	var err error
+	t.width, t.height, err = term.GetSize(t.fd)
+	if err != nil {
+		return err
+	}
+	for _, op := range options {
+		op(t)
+	}
+	t.state, err = term.MakeRaw(t.fd)
+	if err != nil {
+		return err
+	}
+	defer term.Restore(t.fd, t.state)
+	s, err := c.NewSession()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	t.session = s
+	modes := ssh.TerminalModes{
+		ssh.ECHO:          1,
+		ssh.TTY_OP_ISPEED: 14400,
+		ssh.TTY_OP_OSPEED: 14400,
+	}
+	err = s.RequestPty("xterm", t.height, t.width, modes)
+	if err != nil {
+		return err
+	}
+	s.Stdout = t.stdout
+	s.Stderr = t.stdout
+	t.stdin, err = s.StdinPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		io.Copy(t.stdin, os.Stdin)
+		s.Close()
+	}()
+	go t.resize()
+	go t.keepalive()
+	err = s.Start(cmd)
+	if err != nil {
+		return err
+	}
+	return s.Wait()
+}

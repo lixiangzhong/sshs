@@ -2,6 +2,7 @@ package secureshell
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -29,6 +30,10 @@ type Dialer interface {
 	Dial(network, addr string) (net.Conn, error)
 }
 
+type ContextDialer interface {
+	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
 func Dial(dialer Dialer, username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
 	cfg := &ssh.ClientConfig{
 		User:            username,
@@ -36,7 +41,15 @@ func Dial(dialer Dialer, username, host string, authmethod ...ssh.AuthMethod) (*
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
-	conn, err := dialer.Dial("tcp", host)
+	var conn net.Conn
+	var err error
+	if di, ok := dialer.(ContextDialer); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		conn, err = di.DialContext(ctx, "tcp", host)
+	} else {
+		conn, err = dialer.Dial("tcp", host)
+	}
 	if err != nil {
 		return nil, err
 	}

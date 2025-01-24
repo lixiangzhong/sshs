@@ -13,7 +13,7 @@ func main() {
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
-		Version:   "1.10.1",
+		Version:   "1.11.0",
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{
@@ -114,6 +114,12 @@ scripts:
 					},
 				},
 				Action: Socks5Action,
+			},
+			{
+				Name:      "edit",
+				Usage:     "edit config",
+				UsageText: "sshs edit",
+				Action:    EditAction,
 			},
 		},
 	}

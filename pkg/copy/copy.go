@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/k0kubun/go-ansi"
@@ -37,6 +38,11 @@ func (s *Copy) File(ctx context.Context, src, dst string, opts ...Option) error 
 	srcfi, err := srcf.Stat()
 	if err != nil {
 		return err
+	}
+	if fi, err := s.dst.Stat(dst); err == nil {
+		if fi.IsDir() {
+			dst = filepath.Join(dst, srcfi.Name())
+		}
 	}
 	dstf, err := s.dst.OpenFile(dst, os.O_CREATE|os.O_RDWR|os.O_TRUNC, srcfi.Mode())
 	if err != nil {

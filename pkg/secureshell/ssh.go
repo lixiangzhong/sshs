@@ -88,7 +88,7 @@ func keyboardInteractive() ssh.AuthMethod {
 	auth := ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
 		answers := make([]string, 0, len(questions))
 		for i, q := range questions {
-			fmt.Printf(q)
+			fmt.Printf("%s", q)
 			if echos[i] {
 				scan := bufio.NewScanner(os.Stdin)
 				if scan.Scan() {

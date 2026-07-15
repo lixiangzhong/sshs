@@ -71,7 +71,7 @@ sshs edit
 
 ### 执行一次远程命令
 
-`exec` 会连接所选主机，执行一次命令后退出。`cmd` 是 `exec` 的别名。
+`exec` 会连接所选主机，执行一次命令后退出。`cmd` 是 `exec` 的别名，`--` 后面的内容会作为远程命令执行。
 
 ```sh
 # 选择主机后执行
@@ -79,6 +79,12 @@ sshs exec -- uptime
 
 # 用关键词过滤主机后执行
 sshs exec server1 -- uname -a
+
+# 使用多个关键词过滤主机
+sshs exec prod db -- df -h
+
+# 执行需要 shell 解析的命令
+sshs exec server1 -- "cd /tmp && pwd && ls -la"
 
 # 使用 cmd 别名
 sshs cmd server1 -- "cd /tmp && ls -la"
@@ -191,6 +197,18 @@ COMMANDS:
 GLOBAL OPTIONS:
    --help, -h     show help
    --version, -v  print the version
+```
+
+```sh
+> sshs exec -h
+NAME:
+   sshs exec - execute remote command
+
+USAGE:
+   sshs exec [host keywords...] -- <command>
+
+OPTIONS:
+   --help, -h  show help
 ```
 
 ## Notes

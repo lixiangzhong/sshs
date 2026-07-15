@@ -69,6 +69,14 @@ sshs server1
 sshs edit
 ```
 
+### 诊断配置
+
+```sh
+sshs doctor
+```
+
+`doctor` 会输出当前加载到的配置文件路径，并检查配置中是否存在重复的 `host:port`。
+
 ### 执行一次远程命令
 
 `exec` 会连接所选主机，执行一次命令后退出。`cmd` 是 `exec` 的别名，`--` 后面的内容会作为远程命令执行。
@@ -182,7 +190,7 @@ USAGE:
    sshs [flags] [command] [args...]
 
 VERSION:
-   1.13.0
+   1.14.0
 
 COMMANDS:
    scp, cp    scp transfer file or dir
@@ -192,6 +200,7 @@ COMMANDS:
    listen     listen remote forward to local
    socks5     socks5 proxy
    edit       edit config
+   doctor     check sshs config
    help, h    Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:

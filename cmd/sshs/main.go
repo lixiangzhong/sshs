@@ -13,7 +13,7 @@ func main() {
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
-		Version:   "1.13.0",
+		Version:   "1.14.0",
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{
@@ -127,6 +127,12 @@ scripts:
 				Usage:     "edit config",
 				UsageText: "sshs edit",
 				Action:    EditAction,
+			},
+			{
+				Name:      "doctor",
+				Usage:     "check sshs config",
+				UsageText: "sshs doctor",
+				Action:    DoctorAction,
 			},
 		},
 	}

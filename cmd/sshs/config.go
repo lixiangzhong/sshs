@@ -72,21 +72,27 @@ func configFileList(names ...string) []string {
 }
 
 func loadConfig(filenames ...string) ([]Config, error) {
+	cfg, _, err := loadConfigFile(filenames...)
+	return cfg, err
+}
+
+func loadConfigFile(filenames ...string) ([]Config, string, error) {
 	var b []byte
 	var err error
 	var cfg []Config
 	for _, filename := range filenames {
-		b, err = os.ReadFile(parsePath(filename))
+		configPath := parsePath(filename)
+		b, err = os.ReadFile(configPath)
 		if err != nil {
 			continue
 		}
 		err = yaml.Unmarshal(b, &cfg)
 		if err != nil {
-			return nil, fmt.Errorf("%v: %v", filename, err)
+			return nil, configPath, fmt.Errorf("%v: %v", configPath, err)
 		}
-		return cfg, nil
+		return cfg, configPath, nil
 	}
-	return cfg, err
+	return cfg, "", err
 }
 
 func homeDir() string {

@@ -13,7 +13,7 @@ func main() {
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
-		Version:   "1.12.0",
+		Version:   "1.13.0",
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{
@@ -60,6 +60,13 @@ scripts:
 					},
 				},
 				Action: RunAction,
+			},
+			{
+				Name:      "exec",
+				Aliases:   []string{"cmd"},
+				Usage:     "execute remote command",
+				UsageText: "sshs exec [host keywords...] -- <command>",
+				Action:    ExecAction,
 			},
 			{
 				Name:      "forward",

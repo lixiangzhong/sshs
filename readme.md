@@ -69,6 +69,21 @@ sshs server1
 sshs edit
 ```
 
+### 执行一次远程命令
+
+`exec` 会连接所选主机，执行一次命令后退出。`cmd` 是 `exec` 的别名。
+
+```sh
+# 选择主机后执行
+sshs exec -- uptime
+
+# 用关键词过滤主机后执行
+sshs exec server1 -- uname -a
+
+# 使用 cmd 别名
+sshs cmd server1 -- "cd /tmp && ls -la"
+```
+
 ### 文件传输
 
 远程路径用 `:` 开头。文件传输底层使用 SFTP。
@@ -161,16 +176,17 @@ USAGE:
    sshs [flags] [command] [args...]
 
 VERSION:
-   1.12.0
+   1.13.0
 
 COMMANDS:
-   scp, cp  scp transfer file or dir
-   run      run shell file
-   forward  direct_tcp_ip
-   listen   listen remote forward to local
-   socks5   socks5 proxy
-   edit     edit config
-   help, h  Shows a list of commands or help for one command
+   scp, cp    scp transfer file or dir
+   run        run shell file
+   exec, cmd  execute remote command
+   forward    direct_tcp_ip
+   listen     listen remote forward to local
+   socks5     socks5 proxy
+   edit       edit config
+   help, h    Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
    --help, -h     show help
@@ -181,5 +197,6 @@ GLOBAL OPTIONS:
 
 - `user` 为空时默认使用 `root`。
 - `port` 为空或小于等于 0 时默认使用 `22`。
+- `exec` 默认不申请 TTY，适合执行一次性命令；需要交互的命令建议直接用 `sshs` 登录后执行。
 - `local_run` 会直接执行本地命令，不会通过 shell 解析复杂的管道或重定向。
 - `run` 中的远程命令会写入同一个 shell session，前面的 `cd` 会影响后续命令。

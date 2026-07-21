@@ -68,8 +68,11 @@ sshs cp ./1.txt prod-1:/tmp/1.txt
 # 远程到本地。
 sshs cp prod-1:/tmp/1.txt ./1.txt
 
-# 目录传输。
+# 目录传输（默认排除 .DS_Store）。
 sshs cp -r ./dist prod-1:/tmp/dist
+
+# 指定排除文件/目录模式（可重复多次指定）。
+sshs cp -r -exclude "*.log" -exclude ".git" ./dist prod-1:/tmp/dist
 
 # 传输时 gzip 压缩目标文件。
 sshs cp --gzip ./bigfile.txt prod-1:/tmp/bigfile.txt.gz

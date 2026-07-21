@@ -13,14 +13,14 @@ func main() {
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
-		Version:   "1.15.0",
+		Version:   "1.16.0",
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{
 				Name:      "scp",
 				Aliases:   []string{"cp"},
 				Usage:     "scp transfer file or dir",
-				UsageText: "scp [-r] <src> <dst> (example: scp -r localdir :/remotedir)",
+				UsageText: "scp [-r] [-exclude <pattern>] <src> <dst> (example: scp -r localdir :/remotedir)",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:    "r",
@@ -33,6 +33,11 @@ func main() {
 						Aliases: []string{"gz"},
 						Usage:   "warp dst as gzip writer",
 						Value:   false,
+					},
+					&cli.StringSliceFlag{
+						Name:    "exclude",
+						Usage:   "exclude file or directory matching pattern",
+						Value:   cli.NewStringSlice(".DS_Store"),
 					},
 				},
 				Action: SCPAction,

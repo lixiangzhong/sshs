@@ -25,8 +25,28 @@ func New(src, dst afero.Fs) Copy {
 }
 
 type Copy struct {
-	src afero.Fs
-	dst afero.Fs
+	src      afero.Fs
+	dst      afero.Fs
+	excludes []string
+}
+
+func (c *Copy) SetExcludes(excludes []string) {
+	c.excludes = excludes
+}
+
+func (c *Copy) isExcluded(name, path string) bool {
+	for _, pattern := range c.excludes {
+		if pattern == "" {
+			continue
+		}
+		if matched, _ := filepath.Match(pattern, name); matched {
+			return true
+		}
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Copy) File(ctx context.Context, src, dst string, opts ...Option) error {
@@ -66,12 +86,19 @@ func (c *Copy) Dir(ctx context.Context, src, dst string, opts ...Option) error {
 	srcfs := afero.NewBasePathFs(c.src, src)
 	dstfs := afero.NewBasePathFs(c.dst, dst)
 	cc := New(srcfs, dstfs)
+	cc.excludes = c.excludes
 	return fs.WalkDir(afero.NewIOFS(srcfs), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if path != "." && cc.isExcluded(d.Name(), path) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		switch d.IsDir() {
 		case true:

@@ -31,7 +31,7 @@ func SCPAction(c *cli.Context) error {
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
-	err = secureshell.Scp(c.Context, sc, c.Bool("gzip"), c.Bool("r"), src, dst)
+	err = secureshell.Scp(c.Context, sc, c.Bool("gzip"), c.Bool("r"), src, dst, c.StringSlice("exclude")...)
 	if err != nil {
 		return cli.Exit(err, 1)
 	}

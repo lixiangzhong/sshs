@@ -190,7 +190,7 @@ USAGE:
    sshs [flags] [command] [args...]
 
 VERSION:
-   1.14.0
+   1.15.0
 
 COMMANDS:
    scp, cp    scp transfer file or dir
@@ -201,6 +201,7 @@ COMMANDS:
    socks5     socks5 proxy
    edit       edit config
    doctor     check sshs config
+   skill      show sshs agent skill documentation
    help, h    Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:

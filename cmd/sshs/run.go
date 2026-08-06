@@ -113,7 +113,7 @@ func runScripts(ctx context.Context, c *ssh.Client, scripts []Script) {
 			if len(excludes) == 0 {
 				excludes = []string{".DS_Store"}
 			}
-			err = secureshell.Scp(ctx, sclient, v.Scp.Gzip, v.Scp.Dir, v.Scp.Src, v.Scp.Dst, excludes...)
+			err = secureshell.Scp(ctx, sclient, v.Scp.Gzip, v.Scp.Dir, false, v.Scp.Src, v.Scp.Dst, excludes...)
 			if err != nil {
 				log.Println(err)
 				return

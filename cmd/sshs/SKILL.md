@@ -76,6 +76,9 @@ sshs cp -r -exclude "*.log" -exclude ".git" ./dist prod-1:/tmp/dist
 
 # 传输时 gzip 压缩目标文件。
 sshs cp --gzip ./bigfile.txt prod-1:/tmp/bigfile.txt.gz
+
+# 不显示进度条（适合非交互/脚本场景，避免终端被进度条刷屏）。
+sshs cp --no-progress ./bigfile.txt prod-1:/tmp/bigfile.txt
 ```
 
 `cp` 和 `scp` 是同一类传输命令，底层使用 SFTP。远程路径用 `:/path` 表示；如果写成 `name:/path`，`name` 会作为主机筛选关键字。

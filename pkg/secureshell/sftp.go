@@ -18,7 +18,7 @@ func SftpClient(c *ssh.Client, opts ...sftp.ClientOption) (*sftp.Client, error) 
 	return sftp.NewClient(c, opts...)
 }
 
-func Scp(ctx context.Context, remote *sftp.Client, gzipCompress, recursively bool, src string, dst string, excludes ...string) error {
+func Scp(ctx context.Context, remote *sftp.Client, gzipCompress, recursively, noProgress bool, src string, dst string, excludes ...string) error {
 	workdir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -38,7 +38,10 @@ func Scp(ctx context.Context, remote *sftp.Client, gzipCompress, recursively boo
 		}
 	}
 	cp.SetExcludes(excludes)
-	ops := []copy.Option{copy.ProgressBar()}
+	ops := []copy.Option{}
+	if !noProgress {
+		ops = append(ops, copy.ProgressBar())
+	}
 	if gzipCompress {
 		ops = append(ops, copy.GzipCompress())
 	}

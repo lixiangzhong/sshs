@@ -114,6 +114,9 @@ sshs cp -r dist :/tmp/dist
 
 # 传输时 gzip 压缩目标文件
 sshs cp --gzip bigfile.txt :/tmp/bigfile.txt.gz
+
+# 不显示进度条
+sshs cp --no-progress bigfile.txt :/tmp/bigfile.txt
 ```
 
 也可以在 `:` 前写关键词，让 `sshs` 自动过滤主机：

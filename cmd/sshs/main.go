@@ -20,7 +20,7 @@ func main() {
 				Name:      "scp",
 				Aliases:   []string{"cp"},
 				Usage:     "scp transfer file or dir",
-				UsageText: "scp [-r] [-exclude <pattern>] <src> <dst> (example: scp -r localdir :/remotedir)",
+				UsageText: "scp [-r] [-gzip] [-no-progress] [-exclude <pattern>] <src> <dst> (example: scp -r localdir :/remotedir)",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:    "r",
@@ -32,6 +32,12 @@ func main() {
 						Name:    "gzip",
 						Aliases: []string{"gz"},
 						Usage:   "warp dst as gzip writer",
+						Value:   false,
+					},
+					&cli.BoolFlag{
+						Name:    "no-progress",
+						Aliases: []string{"np"},
+						Usage:   "disable progress bar",
 						Value:   false,
 					},
 					&cli.StringSliceFlag{

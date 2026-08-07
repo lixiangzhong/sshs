@@ -156,5 +156,6 @@ scripts:
 	err := app.Run(os.Args)
 	if err != nil {
 		log.Println(err)
+		os.Exit(1)
 	}
 }

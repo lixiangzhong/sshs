@@ -137,6 +137,26 @@ sshs exec server1 -- "cd /tmp && pwd && ls -la"
 sshs cmd server1 -- "cd /tmp && ls -la"
 ```
 
+### 快速修改远程文件
+
+`exec` 通过远程 shell 执行命令，可以直接查看和修改远程文件：
+
+```sh
+# 查看当前内容
+sshs exec server1 -- "cat /etc/nginx/nginx.conf"
+
+# 替换字符串（sed -i 直接覆盖原文件，表达式用单引号包裹避免本地 shell 展开）
+sshs exec server1 -- "sed -i 's/worker_processes 1/worker_processes 4/' /etc/nginx/nginx.conf"
+
+# 追加一行（>> 不覆盖原文件）
+sshs exec server1 -- "echo 'client_max_body_size 10m;' >> /etc/nginx/nginx.conf"
+
+# 验证改动
+sshs exec server1 -- "grep -n worker_processes /etc/nginx/nginx.conf"
+```
+
+`sed -i` 直接覆盖文件且不可逆，改动前建议先备份（`cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak`）；追加用 `>>`，覆盖用 `>`，写错会清空文件。
+
 ### 文件传输
 
 远程路径用 `:` 开头。文件传输底层使用 SFTP。
@@ -232,7 +252,7 @@ USAGE:
    sshs [flags] [command] [args...]
 
 VERSION:
-   1.17.0
+   1.17.1
 
 COMMANDS:
    list       list matched hosts (non-interactive)

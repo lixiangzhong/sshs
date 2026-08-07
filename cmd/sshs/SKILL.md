@@ -188,6 +188,8 @@ sshs run -f test.yaml
 
 ## 常见取舍
 
+- 想知道有哪些主机、或验证关键词是否有效：先执行 `sshs list <keyword> --json`。
+- 批量看一批主机状态（负载/内存/磁盘/时间偏移）：用 `sshs inspect --json`。
 - 只是登录一台机器：直接执行 `sshs <keyword>`，不要写复杂脚本。
 - 只跑一个非交互远程命令：优先用 `sshs exec <keyword> -- <command>`。
 - 需要传多个文件并跑远程命令：优先生成 `sshs run -f` YAML，把传输步骤、远程步骤串起来。

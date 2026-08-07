@@ -1,6 +1,6 @@
 # sshs
 
-不想反复输入 ssh、scp 密码时，可以用 `sshs` 通过配置文件管理主机，并完成 ssh 登录、文件传输、端口转发、SOCKS5 代理和批量命令执行。
+不想反复输入 ssh、scp 密码时，可以用 `sshs` 通过配置文件管理主机，并完成 ssh 登录、文件传输、端口转发、SOCKS5 代理、批量命令执行，以及非交互的主机列表查看（list）与批量巡检（inspect）。
 
 本项目 terminal ui 参考了 https://github.com/yinheli/sshw
 

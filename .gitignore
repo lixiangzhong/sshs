@@ -1,5 +1,7 @@
 *.yaml
+!.goreleaser.yaml
 .idea
 *.txt
 /cmd/sshs/sshs
 .DS_Store
+/dist/

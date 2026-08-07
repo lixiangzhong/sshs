@@ -7,13 +7,16 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// version 默认值供本地直接编译使用；发版时由 GoReleaser 通过 -ldflags 注入 tag 版本号
+var version = "1.17.2"
+
 func main() {
 	log.SetFlags(0)
 	app := &cli.App{
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
-		Version:   "1.17.1",
+		Version:   version,
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{

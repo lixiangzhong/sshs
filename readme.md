@@ -10,6 +10,8 @@
 go install github.com/lixiangzhong/sshs/cmd/sshs@latest
 ```
 
+或从 [GitHub Releases](https://github.com/lixiangzhong/sshs/releases) 下载对应平台的二进制（linux/darwin/windows × amd64/arm64），解压后放入 PATH 即可。
+
 ## configuration
 
 `sshs` 会依次查找当前目录和用户家目录下的配置文件：

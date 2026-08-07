@@ -13,7 +13,7 @@ func main() {
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
-		Version:   "1.16.0",
+		Version:   "1.17.0",
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{
@@ -28,6 +28,29 @@ func main() {
 					},
 				},
 				Action: ListAction,
+			},
+			{
+				Name:      "inspect",
+				Usage:     "inspect matched hosts metrics",
+				UsageText: "sshs inspect [host keywords...] [--timeout <dur>] [--concurrency <n>] [--json]",
+				Flags: []cli.Flag{
+					&cli.DurationFlag{
+						Name:  "timeout",
+						Usage: "per-host timeout (e.g. 10s)",
+						Value: inspectTimeoutDefault,
+					},
+					&cli.IntFlag{
+						Name:  "concurrency",
+						Usage: "max concurrent hosts",
+						Value: inspectConcurrencyDefault,
+					},
+					&cli.BoolFlag{
+						Name:  "json",
+						Usage: "output as json",
+						Value: false,
+					},
+				},
+				Action: InspectAction,
 			},
 			{
 				Name:      "scp",
@@ -54,9 +77,9 @@ func main() {
 						Value:   false,
 					},
 					&cli.StringSliceFlag{
-						Name:    "exclude",
-						Usage:   "exclude file or directory matching pattern",
-						Value:   cli.NewStringSlice(".DS_Store"),
+						Name:  "exclude",
+						Usage: "exclude file or directory matching pattern",
+						Value: cli.NewStringSlice(".DS_Store"),
 					},
 				},
 				Action: SCPAction,

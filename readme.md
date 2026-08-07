@@ -70,6 +70,28 @@ sshs list --json
 
 展示 `NAME`（含分组前缀）、`USER`、`HOST:PORT`、`AUTH`（认证方式）、`JUMPER`（跳板机链）。无匹配主机时退出码为 1。
 
+### 批量巡检主机
+
+对一批主机批量采集系统指标并汇总，`inspect` 非交互运行，可用于脚本或快速扫状态：
+
+```sh
+# 巡检全部主机，输出概览表 + 磁盘明细表
+sshs inspect
+
+# 用关键词过滤目标主机
+sshs inspect prod
+
+# 输出 JSON，供脚本解析
+sshs inspect --json
+
+# 控制单台超时（默认 10s）与并发数（默认 10）
+sshs inspect --timeout 5s --concurrency 20 prod
+```
+
+巡检指标：负载(1/5/15)、CPU 使用率、内存使用率、磁盘使用率（最大挂载点入概览，明细表逐挂载点）、内核与发行版、与本地的时间偏移。单台拨号或采集失败会在对应行标记错误，超时标记为 `timeout`，不影响整批。
+
+注意：`list` 与 `inspect` 的 flags 必须写在主机关键词之前，例如 `sshs inspect --json prod`（不支持 `sshs inspect prod --json`）。
+
 ### ssh 登录
 
 ```sh
@@ -210,10 +232,11 @@ USAGE:
    sshs [flags] [command] [args...]
 
 VERSION:
-   1.15.0
+   1.17.0
 
 COMMANDS:
    list       list matched hosts (non-interactive)
+   inspect    inspect matched hosts metrics
    scp, cp    scp transfer file or dir
    run        run shell file
    exec, cmd  execute remote command

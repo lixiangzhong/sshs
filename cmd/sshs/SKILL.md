@@ -1,6 +1,6 @@
 ---
 name: sshs
-description: 使用本地最新版 sshs 执行登录、传输、端口转发、SOCKS5、exec/cmd 和 run -f；用户要用 sshs 命令完成操作时使用。
+description: 使用本地最新版 sshs 执行登录、传输、端口转发、SOCKS5、exec/cmd、run -f、list 和 inspect；用户要用 sshs 命令完成操作时使用。
 ---
 
 # sshs 使用助手
@@ -20,12 +20,13 @@ description: 使用本地最新版 sshs 执行登录、传输、端口转发、S
 
 1. 安装或首次使用：给 `go install` 和 `sshs -h` 验证命令。
 2. 查看有哪些主机：用 `sshs list`（可加关键词过滤，`--json` 输出结构化结果）。
-3. 登录：用 `sshs`，或 `sshs <keyword>` 先按关键词过滤。
-4. 执行一次性远程命令：用 `sshs exec [keyword...] -- <command>`，`cmd` 是别名。
-5. 传文件：用 `sshs cp` 或 `sshs scp`。
-6. 转发端口：本地端口访问远程服务用 `forward`；远程端口暴露本地服务用 `listen`。
-7. SOCKS5 代理：用 `sshs socks5 -l <local-addr> [keyword...]`。
-8. 批量执行：用 `sshs run -f <file>`，文件可以是 YAML 或 `.sh`。
+3. 批量巡检主机状态（负载/内存/磁盘/时间偏移）：用 `sshs inspect`（`--json` 输出结构化结果）。
+4. 登录：用 `sshs`，或 `sshs <keyword>` 先按关键词过滤。
+5. 执行一次性远程命令：用 `sshs exec [keyword...] -- <command>`，`cmd` 是别名。
+6. 传文件：用 `sshs cp` 或 `sshs scp`。
+7. 转发端口：本地端口访问远程服务用 `forward`；远程端口暴露本地服务用 `listen`。
+8. SOCKS5 代理：用 `sshs socks5 -l <local-addr> [keyword...]`。
+9. 批量执行：用 `sshs run -f <file>`，文件可以是 YAML 或 `.sh`。
 
 ## 常用命令
 
@@ -50,6 +51,26 @@ sshs list --json
 ```
 
 无匹配主机时退出码为 1，可用于探测关键词是否有效。
+
+**批量巡检主机（非交互）：**
+
+```bash
+# 巡检全部主机，输出概览表 + 磁盘明细表。
+sshs inspect
+
+# 用关键词过滤目标主机。
+sshs inspect prod
+
+# 结构化输出，供脚本解析。
+sshs inspect --json
+
+# 控制单台超时（默认 10s）与并发数（默认 10）。
+sshs inspect --timeout 5s --concurrency 20 prod
+```
+
+巡检指标：负载(1/5/15)、CPU 使用率、内存、磁盘使用率、内核/发行版、与本地的时间偏移。单台拨号/采集失败会在对应行标记错误，超时标记 `timeout`，不拖垮整批。
+
+注意：`list` 与 `inspect` 的 flags 必须写在主机关键词之前，例如 `sshs inspect --json prod`（不支持 `sshs inspect prod --json`）。
 
 **交互登录：**
 

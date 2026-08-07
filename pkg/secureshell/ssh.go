@@ -35,11 +35,23 @@ type ContextDialer interface {
 }
 
 func Dial(dialer Dialer, username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
+	return dial(dialer, username, host, true, authmethod...)
+}
+
+// DialNonInteractive 与 Dial 相同，但不附加键盘交互认证（不读 stdin），适合非交互自动化场景。
+func DialNonInteractive(dialer Dialer, username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
+	return dial(dialer, username, host, false, authmethod...)
+}
+
+func dial(dialer Dialer, username, host string, interactive bool, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
 	cfg := &ssh.ClientConfig{
 		User:            username,
-		Auth:            append([]ssh.AuthMethod{keyboardInteractive()}, authmethod...),
+		Auth:            authmethod,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
+	}
+	if interactive {
+		cfg.Auth = append([]ssh.AuthMethod{keyboardInteractive()}, authmethod...)
 	}
 	var conn net.Conn
 	var err error

@@ -17,6 +17,19 @@ func main() {
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{
+				Name:      "list",
+				Usage:     "list matched hosts (non-interactive)",
+				UsageText: "sshs list [host keywords...] [--json]",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "json",
+						Usage: "output as json",
+						Value: false,
+					},
+				},
+				Action: ListAction,
+			},
+			{
 				Name:      "scp",
 				Aliases:   []string{"cp"},
 				Usage:     "scp transfer file or dir",

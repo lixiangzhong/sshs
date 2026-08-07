@@ -19,12 +19,13 @@ description: 使用本地最新版 sshs 执行登录、传输、端口转发、S
 ## 快速判断
 
 1. 安装或首次使用：给 `go install` 和 `sshs -h` 验证命令。
-2. 登录：用 `sshs`，或 `sshs <keyword>` 先按关键词过滤。
-3. 执行一次性远程命令：用 `sshs exec [keyword...] -- <command>`，`cmd` 是别名。
-4. 传文件：用 `sshs cp` 或 `sshs scp`。
-5. 转发端口：本地端口访问远程服务用 `forward`；远程端口暴露本地服务用 `listen`。
-6. SOCKS5 代理：用 `sshs socks5 -l <local-addr> [keyword...]`。
-7. 批量执行：用 `sshs run -f <file>`，文件可以是 YAML 或 `.sh`。
+2. 查看有哪些主机：用 `sshs list`（可加关键词过滤，`--json` 输出结构化结果）。
+3. 登录：用 `sshs`，或 `sshs <keyword>` 先按关键词过滤。
+4. 执行一次性远程命令：用 `sshs exec [keyword...] -- <command>`，`cmd` 是别名。
+5. 传文件：用 `sshs cp` 或 `sshs scp`。
+6. 转发端口：本地端口访问远程服务用 `forward`；远程端口暴露本地服务用 `listen`。
+7. SOCKS5 代理：用 `sshs socks5 -l <local-addr> [keyword...]`。
+8. 批量执行：用 `sshs run -f <file>`，文件可以是 YAML 或 `.sh`。
 
 ## 常用命令
 
@@ -34,6 +35,21 @@ description: 使用本地最新版 sshs 执行登录、传输、端口转发、S
 go install github.com/lixiangzhong/sshs/cmd/sshs@latest
 sshs -h
 ```
+
+**查看主机列表（非交互，脚本/agent 友好）：**
+
+```bash
+# 列出全部主机（分组展开），匹配 name/user/host:port。
+sshs list
+
+# 用关键词过滤。
+sshs list prod
+
+# 结构化输出，供脚本解析。
+sshs list --json
+```
+
+无匹配主机时退出码为 1，可用于探测关键词是否有效。
 
 **交互登录：**
 

@@ -15,6 +15,9 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// configFilenames 是 sshs 依次查找的配置文件候选列表。
+var configFilenames = []string{".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml"}
+
 type Config struct {
 	Name       string   `yaml:"name"`
 	Host       string   `yaml:"host"`
@@ -92,7 +95,7 @@ func loadConfigFile(filenames ...string) ([]Config, string, error) {
 		}
 		return cfg, configPath, nil
 	}
-	return cfg, "", err
+	return cfg, "", fmt.Errorf("no config file found (searched: %s)", strings.Join(filenames, ", "))
 }
 
 func homeDir() string {

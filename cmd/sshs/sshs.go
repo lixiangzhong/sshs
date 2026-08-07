@@ -27,7 +27,7 @@ func ChooseHost(keyword ...string) (*ssh.Client, error) {
 }
 
 func LoadConfig(keyword ...string) ([]Config, error) {
-	cfg, err := loadConfig(configFileList(".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml")...)
+	cfg, err := loadConfig(configFileList(configFilenames...)...)
 	if err != nil {
 		return nil, err
 	}

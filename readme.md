@@ -53,6 +53,23 @@ vi ~/.sshs.yaml
 
 ## Usage
 
+### 查看主机列表
+
+非交互列出匹配的主机，可用于脚本或快速查看有哪些主机可用：
+
+```sh
+# 列出全部主机（分组会展开）
+sshs list
+
+# 用关键词过滤，规则与登录/exec 一致（匹配 name/user/host:port）
+sshs list server1
+
+# 输出 JSON，供脚本解析
+sshs list --json
+```
+
+展示 `NAME`（含分组前缀）、`USER`、`HOST:PORT`、`AUTH`（认证方式）、`JUMPER`（跳板机链）。无匹配主机时退出码为 1。
+
 ### ssh 登录
 
 ```sh
@@ -196,6 +213,7 @@ VERSION:
    1.15.0
 
 COMMANDS:
+   list       list matched hosts (non-interactive)
    scp, cp    scp transfer file or dir
    run        run shell file
    exec, cmd  execute remote command

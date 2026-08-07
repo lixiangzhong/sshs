@@ -29,7 +29,11 @@ func ListAction(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	hosts := filter_unfolding(cfg, "", c.Args().Slice()...)
+	keywords, err := hostKeywords(c)
+	if err != nil {
+		return cli.Exit(err, 1)
+	}
+	hosts := filter_unfolding(cfg, "", keywords...)
 	if len(hosts) == 0 {
 		return cli.Exit("no host matched", 1)
 	}

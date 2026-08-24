@@ -9,7 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	"sort"
+
 	"github.com/lixiangzhong/sshs/pkg/secureshell"
+	"github.com/urfave/cli/v2"
 
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v2"
@@ -17,6 +20,26 @@ import (
 
 // configFilenames 是 sshs 依次查找的配置文件候选列表。
 var configFilenames = []string{".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml"}
+
+// loadSortedHosts 解析上下文中的主机关键词、加载配置文件、扁平化过滤主机，并按主机名称排序。
+func loadSortedHosts(c *cli.Context) ([]Config, error) {
+	cfg, err := loadConfig(configFileList(configFilenames...)...)
+	if err != nil {
+		return nil, err
+	}
+	keywords, err := hostKeywords(c)
+	if err != nil {
+		return nil, cli.Exit(err, 1)
+	}
+	hosts := filter_unfolding(cfg, "", keywords...)
+	if len(hosts) == 0 {
+		return nil, cli.Exit("no host matched", 1)
+	}
+	sort.SliceStable(hosts, func(i, j int) bool {
+		return hosts[i].Name < hosts[j].Name
+	})
+	return hosts, nil
+}
 
 type Config struct {
 	Name       string   `yaml:"name"`

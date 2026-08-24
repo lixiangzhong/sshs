@@ -9,7 +9,7 @@ import (
 )
 
 func EditAction(c *cli.Context) error {
-	filenames := configFileList(".sshs.store", ".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml")
+	filenames := configFileList(configFilenames...)
 	for _, filename := range filenames {
 		err := func(filename string) error {
 			//todo 加密存储

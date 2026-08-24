@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -25,21 +24,10 @@ type hostInfo struct {
 }
 
 func ListAction(c *cli.Context) error {
-	cfg, err := loadConfig(configFileList(configFilenames...)...)
+	hosts, err := loadSortedHosts(c)
 	if err != nil {
 		return err
 	}
-	keywords, err := hostKeywords(c)
-	if err != nil {
-		return cli.Exit(err, 1)
-	}
-	hosts := filter_unfolding(cfg, "", keywords...)
-	if len(hosts) == 0 {
-		return cli.Exit("no host matched", 1)
-	}
-	sort.SliceStable(hosts, func(i, j int) bool {
-		return hosts[i].Name < hosts[j].Name
-	})
 
 	infos := make([]hostInfo, 0, len(hosts))
 	for _, h := range hosts {

@@ -14,7 +14,7 @@ type doctorIssue struct {
 }
 
 func DoctorAction(c *cli.Context) error {
-	cfg, configPath, err := loadConfigFile(configFileList(".sshs.yaml", "sshs.yaml", ".sshw.yaml", "sshw.yaml")...)
+	cfg, configPath, err := loadConfigFile(configFileList(configFilenames...)...)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("config: %v", err), 1)
 	}

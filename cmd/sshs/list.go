@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -21,6 +19,7 @@ type hostInfo struct {
 	Port   int      `json:"port"`
 	Auth   []string `json:"auth"`
 	Jumper []string `json:"jumper"`
+	Addr   string   `json:"-"`
 }
 
 func ListAction(c *cli.Context) error {
@@ -55,6 +54,7 @@ func toHostInfo(c Config) hostInfo {
 		Port:   c.RemotePort(),
 		Auth:   authMethods(c),
 		Jumper: jumperChain(c),
+		Addr:   c.RemoteAddr(),
 	}
 }
 
@@ -106,7 +106,7 @@ func printHostTable(w io.Writer, infos []hostInfo) {
 		t.AppendRow(table.Row{
 			info.Name,
 			info.User,
-			net.JoinHostPort(info.Host, strconv.Itoa(info.Port)),
+			info.Addr,
 			auth,
 			jumper,
 		})

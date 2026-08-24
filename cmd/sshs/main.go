@@ -8,7 +8,7 @@ import (
 )
 
 // version 默认值供本地直接编译使用；发版时由 GoReleaser 通过 -ldflags 注入 tag 版本号
-var version = "1.18.0"
+var version = "1.19.0"
 
 func main() {
 	log.SetFlags(0)

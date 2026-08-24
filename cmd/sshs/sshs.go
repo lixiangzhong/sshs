@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/lixiangzhong/sshs/pkg/secureshell"
@@ -17,6 +19,99 @@ func ChooseHost(keyword ...string) (*ssh.Client, error) {
 		return nil, err
 	}
 	return dialThroughJumpers(host, secureshell.Dial)
+}
+
+func ChooseHostNonInteractive(keyword ...string) (*ssh.Client, error) {
+	host, err := SelectHostNonInteractive(keyword...)
+	if err != nil {
+		return nil, err
+	}
+	return dialThroughJumpers(host, secureshell.DialNonInteractive)
+}
+
+func SelectHostNonInteractive(keyword ...string) (Config, error) {
+	if len(keyword) == 0 {
+		return Config{}, errors.New("no host matched")
+	}
+	cfg, err := loadConfig(configFileList(configFilenames...)...)
+	if err != nil {
+		return Config{}, err
+	}
+	hosts := filter_unfolding(cfg, "", keyword...)
+	return selectSingleHost(hosts, keyword...)
+}
+
+func selectSingleHost(hosts []Config, keyword ...string) (Config, error) {
+	if len(hosts) == 0 {
+		return Config{}, errors.New("no host matched")
+	}
+	if len(hosts) == 1 {
+		return hosts[0], nil
+	}
+
+	exactHosts := filterExactMatch(hosts, keyword...)
+	if len(exactHosts) == 1 {
+		return exactHosts[0], nil
+	}
+
+	targetList := hosts
+	if len(exactHosts) > 1 {
+		targetList = exactHosts
+	}
+	names := make([]string, 0, len(targetList))
+	for _, h := range targetList {
+		names = append(names, strings.TrimPrefix(h.Name, "/"))
+	}
+	return Config{}, fmt.Errorf("multiple hosts matched: [%s], please specify exact name", strings.Join(names, ", "))
+}
+
+func isExactMatch(c Config, keywords ...string) bool {
+	if len(keywords) == 0 {
+		return false
+	}
+	cleanName := strings.TrimPrefix(c.Name, "/")
+	baseName := filepath.Base(c.Name)
+	if baseName == "." || baseName == "/" {
+		baseName = cleanName
+	}
+
+	if len(keywords) == 1 {
+		kw := keywords[0]
+		cleanKW := strings.TrimPrefix(kw, "/")
+		if cleanName == cleanKW || c.Name == kw || baseName == kw || c.Host == kw || c.RemoteAddr() == kw {
+			return true
+		}
+		return false
+	}
+
+	joined := strings.Join(keywords, "/")
+	cleanJoined := strings.TrimPrefix(joined, "/")
+	if cleanName == cleanJoined || c.Name == joined {
+		return true
+	}
+	if baseName == keywords[len(keywords)-1] {
+		allPrefixMatch := true
+		for _, kw := range keywords[:len(keywords)-1] {
+			if !strings.Contains(cleanName, kw) {
+				allPrefixMatch = false
+				break
+			}
+		}
+		if allPrefixMatch {
+			return true
+		}
+	}
+	return false
+}
+
+func filterExactMatch(candidates []Config, keywords ...string) []Config {
+	var exact []Config
+	for _, c := range candidates {
+		if isExactMatch(c, keywords...) {
+			exact = append(exact, c)
+		}
+	}
+	return exact
 }
 
 // dialThroughJumpers 逐级穿过 jumper 链并连接目标主机，dial 用于指定拨号方式（交互/非交互）。

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"os"
 	"strings"
 
 	"github.com/lixiangzhong/sshs/pkg/secureshell"
 
 	"github.com/urfave/cli/v2"
+	"golang.org/x/term"
 )
 
 func SCPAction(c *cli.Context) error {
@@ -31,7 +33,8 @@ func SCPAction(c *cli.Context) error {
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
-	err = secureshell.Scp(c.Context, sc, c.Bool("gzip"), c.Bool("r"), c.Bool("no-progress"), src, dst, c.StringSlice("exclude")...)
+	noProgress := c.Bool("no-progress") || !term.IsTerminal(int(os.Stdout.Fd()))
+	err = secureshell.Scp(c.Context, sc, c.Bool("gzip"), c.Bool("r"), noProgress, src, dst, c.StringSlice("exclude")...)
 	if err != nil {
 		return cli.Exit(err, 1)
 	}

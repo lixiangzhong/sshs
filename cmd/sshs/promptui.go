@@ -27,6 +27,12 @@ func UISelect(keyword ...string) (Config, error) {
 			return cfg[0], nil
 		}
 	}
+	if len(cfg) > 1 && len(keyword) > 0 {
+		exact := filterExactMatch(cfg, keyword...)
+		if len(exact) == 1 && len(exact[0].Children) == 0 && exact[0].Host != "" {
+			return exact[0], nil
+		}
+	}
 	root = cfg
 	return uiSelect(nil, cfg)
 }

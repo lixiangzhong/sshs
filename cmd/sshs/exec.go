@@ -15,9 +15,9 @@ func ExecAction(c *cli.Context) error {
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
-	client, err := ChooseHost(keywords...)
+	client, err := ChooseHostNonInteractive(keywords...)
 	if err != nil {
-		return err
+		return cli.Exit(err, 1)
 	}
 	defer client.Close()
 

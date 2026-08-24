@@ -144,7 +144,7 @@ func runShellFile(ctx context.Context, c *ssh.Client, s string) error {
 		return err
 	}
 	defer sclient.Close()
-	tempFilename := filepath.Join("/tmp", fmt.Sprintf(".sshs_%v.js", time.Now().UnixNano()))
+	tempFilename := filepath.Join("/tmp", fmt.Sprintf(".sshs_%v.sh", time.Now().UnixNano()))
 	f, err := sclient.Create(tempFilename)
 	if err != nil {
 		log.Println(err)

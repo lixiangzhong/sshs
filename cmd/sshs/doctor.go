@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 )
@@ -42,8 +43,16 @@ func doctorWriter(c *cli.Context) io.Writer {
 }
 
 func checkDoctorIssues(cfg []Config) []doctorIssue {
+	flatHosts := filter_unfolding(cfg, "")
 	hosts := make(map[string][]string)
-	collectConfigHosts(hosts, "", cfg)
+	for _, h := range flatHosts {
+		if h.Host == "" {
+			continue
+		}
+		name := strings.TrimPrefix(h.Name, "/")
+		remoteAddr := h.RemoteAddr()
+		hosts[remoteAddr] = append(hosts[remoteAddr], name)
+	}
 
 	var issues []doctorIssue
 	remoteAddrs := make([]string, 0, len(hosts))
@@ -61,29 +70,4 @@ func checkDoctorIssues(cfg []Config) []doctorIssue {
 		})
 	}
 	return issues
-}
-
-func collectConfigHosts(hosts map[string][]string, prefix string, cfg []Config) {
-	for _, item := range cfg {
-		name := joinConfigName(prefix, item.Name)
-		if len(item.Children) > 0 {
-			collectConfigHosts(hosts, name, item.Children)
-			continue
-		}
-		if item.Host == "" {
-			continue
-		}
-		remoteAddr := item.RemoteAddr()
-		hosts[remoteAddr] = append(hosts[remoteAddr], name)
-	}
-}
-
-func joinConfigName(prefix, name string) string {
-	if prefix == "" {
-		return name
-	}
-	if name == "" {
-		return prefix
-	}
-	return prefix + "/" + name
 }

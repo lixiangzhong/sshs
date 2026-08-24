@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -11,7 +13,7 @@ import (
 const execCommandSeparator = "--"
 
 func ExecAction(c *cli.Context) error {
-	keywords, command, err := parseExecArgs(os.Args, c.Command.Name, c.Command.Aliases...)
+	keywords, command, err := parseExecArgs(c.Args().Slice(), c.Command.Name, c.Command.Aliases...)
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
@@ -30,6 +32,33 @@ func ExecAction(c *cli.Context) error {
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
 	session.Stdin = os.Stdin
+
+	timeout := c.Duration("timeout")
+	if timeout > 0 {
+		ctx, cancel := context.WithTimeout(c.Context, timeout)
+		defer cancel()
+
+		done := make(chan struct{})
+		defer close(done)
+
+		go func() {
+			select {
+			case <-ctx.Done():
+				session.Close()
+				client.Close()
+			case <-done:
+			}
+		}()
+
+		if err := session.Run(command); err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				return cli.Exit(fmt.Sprintf("command timed out after %v", timeout), 1)
+			}
+			return cli.Exit(err, exitCode(err))
+		}
+		return nil
+	}
+
 	if err := session.Run(command); err != nil {
 		return cli.Exit(err, exitCode(err))
 	}
@@ -38,12 +67,16 @@ func ExecAction(c *cli.Context) error {
 
 func parseExecArgs(args []string, name string, aliases ...string) ([]string, string, error) {
 	commandIndex := findExecCommandIndex(args, append([]string{name}, aliases...))
-	if commandIndex < 0 {
-		return nil, "", errors.New("missing exec command")
+	var searchArgs []string
+	if commandIndex >= 0 {
+		searchArgs = args[commandIndex+1:]
+	} else {
+		searchArgs = args
 	}
+
 	separatorIndex := -1
-	for index := commandIndex + 1; index < len(args); index++ {
-		if args[index] == execCommandSeparator {
+	for index, arg := range searchArgs {
+		if arg == execCommandSeparator {
 			separatorIndex = index
 			break
 		}
@@ -51,11 +84,20 @@ func parseExecArgs(args []string, name string, aliases ...string) ([]string, str
 	if separatorIndex < 0 {
 		return nil, "", errors.New("missing -- before command")
 	}
-	if separatorIndex == len(args)-1 {
+	if separatorIndex == len(searchArgs)-1 {
 		return nil, "", errors.New("missing command")
 	}
-	keywords := args[commandIndex+1 : separatorIndex]
-	command := strings.Join(args[separatorIndex+1:], " ")
+
+	rawKeywords := searchArgs[:separatorIndex]
+	var keywords []string
+	for _, kw := range rawKeywords {
+		if strings.HasPrefix(kw, "-") {
+			return nil, "", fmt.Errorf("flags must appear before host keywords, got %q", kw)
+		}
+		keywords = append(keywords, kw)
+	}
+
+	command := strings.Join(searchArgs[separatorIndex+1:], " ")
 	return keywords, command, nil
 }
 

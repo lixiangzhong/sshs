@@ -70,10 +70,11 @@ sshs prod-1
 
 ```bash
 sshs exec prod-1 -- uname -a
-sshs cmd prod-1 -- "cd /tmp && ls -la"   # cmd 是别名
+sshs exec --timeout 10s prod-1 -- uname -a        # 支持超时控制（默认 0 不限）
+sshs cmd prod-1 -- "cd /tmp && ls -la"            # cmd 是别名
 ```
 
-`--` 分隔关键词与命令；exec 不申请 TTY。
+`--` 分隔关键词与命令；exec 不申请 TTY；flags（如 `--timeout`）写在关键词前。
 
 **快速修改远程文件（看 → 改 → 验证）：**
 

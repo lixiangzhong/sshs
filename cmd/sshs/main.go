@@ -115,7 +115,15 @@ scripts:
 				Name:      "exec",
 				Aliases:   []string{"cmd"},
 				Usage:     "execute remote command",
-				UsageText: "sshs exec [host keywords...] -- <command>",
+				UsageText: "sshs exec [--timeout <dur>] [host keywords...] -- <command>",
+				Flags: []cli.Flag{
+					&cli.DurationFlag{
+						Name:    "timeout",
+						Aliases: []string{"t"},
+						Usage:   "command execution timeout (e.g. 10s, 1m)",
+						Value:   0,
+					},
+				},
 				Action:    ExecAction,
 			},
 			{

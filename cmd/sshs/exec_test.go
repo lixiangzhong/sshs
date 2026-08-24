@@ -46,6 +46,19 @@ func Test_parseExecArgs(t *testing.T) {
 			commandName: "exec",
 			wantErr:     true,
 		},
+		{
+			name:        "sliced context args without command name",
+			args:        []string{"prod", "--", "uptime"},
+			commandName: "exec",
+			keywords:    []string{"prod"},
+			command:     "uptime",
+		},
+		{
+			name:        "misplaced flag after keyword",
+			args:        []string{"prod", "-t", "--", "uptime"},
+			commandName: "exec",
+			wantErr:     true,
+		},
 	}
 
 	for _, tt := range tests {

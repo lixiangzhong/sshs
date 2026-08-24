@@ -34,7 +34,10 @@ func TestInspectHostTimeoutShort(t *testing.T) {
 
 func TestParseInspectOutput(t *testing.T) {
 	out := "hostname=web-01\nos=Ubuntu 24.04\nload1=0.1\nload5=0.2\nload15=0.3\n" +
-		"disk=/ 20G 5G 25%\ndisk=/data 80G 60G 75%\ntime_epoch=1700000000\n"
+		"cpu_model=Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz\ncpu_cores=4\ncpu_threads=8\n" +
+		"uptime_sec=2764800\ntcp_estab=128\n" +
+		"mem_total=16384MB\nmem_avail=12288MB\nmem_used=4096MB\nmem_pct=25.0\n" +
+		"disk=/ 20G 5G 25%\ndisk=/data 80G 60G 75%\ndisk=/var/lib/docker/overlay2/abc 100G 20G 20%\ndisk=overlay2/2d31c2a45870decae8363efc9513603a28c11713ff8f87b621d32d0889ce744a/merged 100G 20G 20%\ndisk=/var/lib/docker/containers/123/mounts/shm 64M 0 0%\ntime_epoch=1700000000\n"
 	data, disks := parseInspectOutput(out)
 
 	if data["hostname"] != "web-01" {
@@ -44,20 +47,98 @@ func TestParseInspectOutput(t *testing.T) {
 	if data["os"] != "Ubuntu 24.04" {
 		t.Errorf("os = %q, want %q", data["os"], "Ubuntu 24.04")
 	}
+	if data["cpu_model"] != "Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz" {
+		t.Errorf("cpu_model = %q", data["cpu_model"])
+	}
+	if data["cpu_cores"] != "4" || data["cpu_threads"] != "8" {
+		t.Errorf("cpu cores/threads = %s/%s, want 4/8", data["cpu_cores"], data["cpu_threads"])
+	}
+	if data["uptime_sec"] != "2764800" || data["tcp_estab"] != "128" {
+		t.Errorf("uptime/tcp = %s/%s", data["uptime_sec"], data["tcp_estab"])
+	}
+	if data["mem_total"] != "16384MB" {
+		t.Errorf("mem_total = %q, want 16384MB", data["mem_total"])
+	}
 	if len(disks) != 2 {
-		t.Errorf("disks = %v, want 2 entries", disks)
+		t.Errorf("disks = %v, want 2 entries (all docker overlay/containers should be filtered)", disks)
 	}
 }
 
-func TestMaxDiskPct(t *testing.T) {
-	if got := maxDiskPct([]string{"/|20G|5G|25%", "/data|80G|60G|75%"}); got != "75%" {
-		t.Errorf("maxDiskPct = %q, want 75%%", got)
+func TestFormatCPUSpec(t *testing.T) {
+	d1 := map[string]string{
+		"cpu_cores":   "4",
+		"cpu_threads": "8",
+		"cpu_pct":     "13.0",
 	}
-	if got := maxDiskPct(nil); got != "-" {
-		t.Errorf("maxDiskPct(nil) = %q, want -", got)
+	if got := formatCPUSpec(d1); got != "4C8T(13.0%)" {
+		t.Errorf("formatCPUSpec = %q, want 4C8T(13.0%%)", got)
 	}
-	if got := maxDiskPct([]string{"bad"}); got != "-" {
-		t.Errorf("maxDiskPct(bad) = %q, want -", got)
+
+	d2 := map[string]string{
+		"cpu_cores":   "2",
+		"cpu_threads": "2",
+		"cpu_pct":     "5.0",
+	}
+	if got := formatCPUSpec(d2); got != "2C(5.0%)" {
+		t.Errorf("formatCPUSpec = %q, want 2C(5.0%%)", got)
+	}
+
+	// 多物理 CPU (双路 16 核无超线程)
+	d3 := map[string]string{
+		"cpu_sockets":          "2",
+		"cpu_cores_per_socket": "16",
+		"cpu_cores":            "32",
+		"cpu_threads":          "32",
+		"cpu_pct":              "15.0",
+	}
+	if got := formatCPUSpec(d3); got != "2*16C(15.0%)" {
+		t.Errorf("formatCPUSpec = %q, want 2*16C(15.0%%)", got)
+	}
+
+	// 多物理 CPU (双路 16 核 32 线程带超线程)
+	d4 := map[string]string{
+		"cpu_sockets":          "2",
+		"cpu_cores_per_socket": "16",
+		"cpu_cores":            "32",
+		"cpu_threads":          "64",
+		"cpu_pct":              "20.0",
+	}
+	if got := formatCPUSpec(d4); got != "2*16C32T(20.0%)" {
+		t.Errorf("formatCPUSpec = %q, want 2*16C32T(20.0%%)", got)
+	}
+
+	if got := formatCPUSpec(nil); got != "-" {
+		t.Errorf("formatCPUSpec(nil) = %q, want -", got)
+	}
+}
+
+func TestFormatMemSpec(t *testing.T) {
+	d1 := map[string]string{
+		"mem_total": "16384MB",
+		"mem_pct":   "50.0",
+	}
+	if got := formatMemSpec(d1); got != "16G(50.0%)" {
+		t.Errorf("formatMemSpec = %q, want 16G(50.0%%)", got)
+	}
+
+	d2 := map[string]string{
+		"mem_total": "7980MB",
+		"mem_pct":   "57.5",
+	}
+	if got := formatMemSpec(d2); got != "7.8G(57.5%)" {
+		t.Errorf("formatMemSpec = %q, want 7.8G(57.5%%)", got)
+	}
+
+	d3 := map[string]string{
+		"mem_total": "512MB",
+		"mem_pct":   "50.0",
+	}
+	if got := formatMemSpec(d3); got != "512M(50.0%)" {
+		t.Errorf("formatMemSpec = %q, want 512M(50.0%%)", got)
+	}
+
+	if got := formatMemSpec(nil); got != "-" {
+		t.Errorf("formatMemSpec(nil) = %q, want -", got)
 	}
 }
 
@@ -74,6 +155,91 @@ func TestNtpOffset(t *testing.T) {
 	}
 	if got := ntpOffset(strconv.FormatInt(now+5, 10)); got != "+5s" {
 		t.Errorf("ntpOffset(now+5) = %q, want +5s", got)
+	}
+	if got := ntpOffset("1700000005", 1700000000); got != "+5s" {
+		t.Errorf("ntpOffset with localTime = %q, want +5s", got)
+	}
+	if got := ntpOffset("1700000000", 1700000005); got != "-5s" {
+		t.Errorf("ntpOffset with localTime = %q, want -5s", got)
+	}
+}
+
+func TestFormatTimeSpec(t *testing.T) {
+	d1 := map[string]string{
+		"ntp_offset": "0s",
+		"timezone":   "Asia/Shanghai",
+		"tz_offset":  "+0800",
+	}
+	if got := formatTimeSpec(d1); got != "0s (Asia/Shanghai +08:00)" {
+		t.Errorf("formatTimeSpec = %q", got)
+	}
+
+	d2 := map[string]string{
+		"ntp_offset": "+1s",
+		"timezone":   "Etc/UTC",
+		"tz_offset":  "+0000",
+	}
+	if got := formatTimeSpec(d2); got != "+1s (UTC +00:00)" {
+		t.Errorf("formatTimeSpec = %q", got)
+	}
+
+	if got := formatTimeSpec(nil); got != "-" {
+		t.Errorf("formatTimeSpec(nil) = %q, want -", got)
+	}
+}
+
+func TestFormatTZOffset(t *testing.T) {
+	if got := formatTZOffset("+0800"); got != "+08:00" {
+		t.Errorf("formatTZOffset(+0800) = %q, want +08:00", got)
+	}
+	if got := formatTZOffset("-0500"); got != "-05:00" {
+		t.Errorf("formatTZOffset(-0500) = %q, want -05:00", got)
+	}
+	if got := formatTZOffset("UTC"); got != "UTC" {
+		t.Errorf("formatTZOffset(UTC) = %q, want UTC", got)
+	}
+}
+
+func TestFormatTCP(t *testing.T) {
+	if got := formatTCP(map[string]string{"tcp_estab": "128"}); got != "128" {
+		t.Errorf("formatTCP = %q, want 128", got)
+	}
+	if got := formatTCP(map[string]string{"tcp_estab": "12500"}); got != "12.5k" {
+		t.Errorf("formatTCP = %q, want 12.5k", got)
+	}
+	if got := formatTCP(nil); got != "-" {
+		t.Errorf("formatTCP(nil) = %q, want -", got)
+	}
+}
+
+func TestFormatOSSpec(t *testing.T) {
+	d1 := map[string]string{
+		"os":          "Ubuntu 24.04",
+		"uptime_sec":  "2764800",
+	}
+	if got := formatOSSpec(d1); got != "Ubuntu 24.04 (32d)" {
+		t.Errorf("formatOSSpec = %q, want Ubuntu 24.04 (32d)", got)
+	}
+	if got := formatOSSpec(nil); got != "-" {
+		t.Errorf("formatOSSpec(nil) = %q, want -", got)
+	}
+}
+
+func TestFormatUptime(t *testing.T) {
+	if got := formatUptime("86400"); got != "1d" {
+		t.Errorf("formatUptime(86400) = %q, want 1d", got)
+	}
+	if got := formatUptime("3600"); got != "1h" {
+		t.Errorf("formatUptime(3600) = %q, want 1h", got)
+	}
+	if got := formatUptime("120"); got != "2m" {
+		t.Errorf("formatUptime(120) = %q, want 2m", got)
+	}
+	if got := formatUptime("45"); got != "45s" {
+		t.Errorf("formatUptime(45) = %q, want 45s", got)
+	}
+	if got := formatUptime(""); got != "-" {
+		t.Errorf("formatUptime(empty) = %q, want -", got)
 	}
 }
 

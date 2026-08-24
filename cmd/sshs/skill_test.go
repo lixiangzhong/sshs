@@ -20,7 +20,7 @@ func TestSkillAction(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "sshs 使用助手") {
+	if !strings.Contains(output, "sshs 运维助手") {
 		t.Fatalf("output does not contain expected header: %s", output)
 	}
 }

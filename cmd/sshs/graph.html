@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>sshs graph - {{.HostName}} ({{.HostIP}})</title>
+  <script src="https://gw.alipayobjects.com/os/lib/antv/g6/4.8.24/dist/g6.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1120; color: #f8fafc; }
+    #header {
+      height: 46px; background: #1e293b; border-bottom: 1px solid #334155;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px; z-index: 10; position: relative;
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .badge-host {
+      background: #0284c7; color: #fff; font-weight: bold;
+      padding: 2px 8px; border-radius: 4px; font-size: 11px; letter-spacing: 0.5px;
+    }
+    .host-ip { color: #94a3b8; font-size: 12px; font-weight: normal; }
+    .controls-group { display: flex; align-items: center; gap: 10px; font-size: 12px; margin-left: 6px; }
+    .controls-group label { cursor: pointer; display: flex; align-items: center; gap: 4px; color: #cbd5e1; }
+    .controls-group select, .controls-group input[type="number"] {
+      background: #0f172a; border: 1px solid #475569; color: #f8fafc;
+      padding: 3px 6px; border-radius: 4px; font-size: 12px; outline: none;
+    }
+    .header-right { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .status-indicator {
+      display: flex; align-items: center; gap: 6px; font-size: 11px;
+      padding: 2px 8px; border-radius: 10px; background: #0f172a; border: 1px solid #334155; color: #cbd5e1;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: #10b981;
+      box-shadow: 0 0 5px #10b981; transition: all 0.3s;
+    }
+    .status-dot.loading { background: #f59e0b; box-shadow: 0 0 5px #f59e0b; }
+    .status-dot.error { background: #ef4444; box-shadow: 0 0 5px #ef4444; }
+    .btn {
+      background: #334155; color: #f8fafc; border: 1px solid #475569;
+      padding: 3px 9px; border-radius: 4px; cursor: pointer; font-size: 12px;
+      display: flex; align-items: center; gap: 4px; transition: all 0.2s;
+    }
+    .btn:hover { background: #38bdf8; color: #0f172a; }
+    .btn.primary { background: #0284c7; border-color: #38bdf8; }
+    .btn.primary:hover { background: #38bdf8; color: #0f172a; }
+    #container { width: 100%; height: calc(100vh - 46px); position: relative; }
+    #mountNode { width: 100%; height: 100%; }
+    .legend {
+      position: absolute; bottom: 12px; left: 12px;
+      background: rgba(30, 41, 59, 0.92); border: 1px solid #334155;
+      border-radius: 6px; padding: 6px 12px; display: flex; gap: 12px;
+      font-size: 11px; z-index: 20; align-items: center;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+    #detailPanel {
+      position: absolute; top: 12px; right: 12px; width: 440px;
+      max-height: calc(100% - 24px); background: rgba(30, 41, 59, 0.95);
+      backdrop-filter: blur(10px); border: 1px solid #334155;
+      border-radius: 8px; padding: 14px; overflow-y: auto;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.6); display: none; z-index: 20;
+    }
+    #detailPanel h3 {
+      font-size: 13px; margin-bottom: 8px; color: #38bdf8;
+      border-bottom: 1px solid #334155; padding-bottom: 6px;
+    }
+    .tuple-table {
+      width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px;
+    }
+    .tuple-table th, .tuple-table td {
+      border: 1px solid #334155; padding: 5px 7px; text-align: left;
+    }
+    .tuple-table th { background: #0f172a; color: #94a3b8; font-weight: 600; }
+    .tuple-table tr:nth-child(even) { background: rgba(15, 23, 42, 0.5); }
+    .state-badge {
+      display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 10px;
+      background: #064e3b; color: #34d399; font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <div class="header-left">
+      <span class="badge-host">{{.HostName}}</span>
+      <span class="host-ip">({{.HostIP}})</span>
+      <div class="controls-group">
+        <span>显示范围:</span>
+        <label><input type="checkbox" id="chkLocal" checked onchange="onFilterChange()"> 本机内</label>
+        <label><input type="checkbox" id="chkInbound" checked onchange="onFilterChange()"> 进站</label>
+        <label><input type="checkbox" id="chkOutbound" checked onchange="onFilterChange()"> 出站</label>
+        <span style="margin-left: 6px;">协议:</span>
+        <label><input type="checkbox" id="chkTCP" checked onchange="onFilterChange()"> TCP</label>
+        <label><input type="checkbox" id="chkUDP" checked onchange="onFilterChange()"> UDP</label>
+        <span style="margin-left: 6px;">聚合阈值:</span>
+        <input type="number" id="thresholdInput" value="10" min="2" max="100" style="width: 44px; text-align: center;" onchange="onThresholdChange(this.value)">
+        <span style="margin-left: 6px;">定时刷新:</span>
+        <select id="intervalSelect" onchange="changeInterval()">
+          <option value="0" {{if eq .DefaultIntervalSec 0}}selected{{end}}>手动刷新</option>
+          <option value="5" {{if eq .DefaultIntervalSec 5}}selected{{end}}>5 秒</option>
+          <option value="10" {{if eq .DefaultIntervalSec 10}}selected{{end}}>10 秒</option>
+          <option value="20" {{if eq .DefaultIntervalSec 20}}selected{{end}}>20 秒</option>
+          <option value="30" {{if eq .DefaultIntervalSec 30}}selected{{end}}>30 秒</option>
+        </select>
+        <button class="btn" onclick="graph.fitView(40)">居中</button>
+        <button class="btn primary" id="btnRefresh" onclick="fetchTopology(true)">刷新</button>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-indicator">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="container">
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background: #3b82f6;"></div>本机</div>
+      <div class="legend-item"><div class="legend-dot" style="background: #10b981;"></div>入站</div>
+      <div class="legend-item"><div class="legend-dot" style="background: #8b5cf6;"></div>出站</div>
+      <div class="legend-item" style="color: #cbd5e1; margin-left: 4px;">── TCP</div>
+      <div class="legend-item" style="color: #cbd5e1;">┄┄ UDP</div>
+    </div>
+
+    <div id="detailPanel">
+      <h3 id="detailTitle">连接详情</h3>
+      <div id="detailContent"></div>
+    </div>
+
+    <div id="mountNode"></div>
+  </div>
+
+  <script>
+    let currentTopo = null;
+    let refreshTimer = null;
+    let currentIntervalSec = {{.DefaultIntervalSec}};
+    let aggregateThreshold = 10;     // 默认 10 条连接聚合为单条边
+    let isFirstRender = true;
+
+    // 配色统一规范：
+    // 本机体系（Server/Service进程/内部边/挂载边）: 蓝色系 (#3b82f6)
+    // 外部入站体系（Client客户端/入站边）: 绿色系 (#10b981)
+    // 外部出站体系（Outbound目标/出站边）: 紫色系 (#8b5cf6)
+    const colors = {
+      server: { fill: '#1e3a8a', stroke: '#3b82f6', text: '#eff6ff' },
+      service: { fill: '#1d4ed8', stroke: '#60a5fa', text: '#eff6ff' },
+      client: { fill: '#064e3b', stroke: '#10b981', text: '#ecfdf5' },
+      outbound: { fill: '#4c1d95', stroke: '#8b5cf6', text: '#f5f3ff' },
+      edgeLocal: '#3b82f6',
+      edgeInbound: '#10b981',
+      edgeOutbound: '#8b5cf6'
+    };
+
+    function escapeHTML(value) {
+      const entities = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      };
+      return String(value ?? '').replace(/[&<>"']/g, character => entities[character]);
+    }
+
+    function onThresholdChange(val) {
+      const v = parseInt(val, 10);
+      if (!isNaN(v) && v >= 1) {
+        aggregateThreshold = v;
+        onFilterChange();
+      }
+    }
+
+    function processG6Data(topo) {
+      if (!topo || !topo.nodes) return { nodes: [], edges: [], combos: [] };
+
+      // 1. 统计每个节点的连接总数，用于驱动节点大小
+      const nodeConnCounts = {};
+      (topo.edges || []).forEach(e => {
+        const cnt = e.connCount || (e.details ? e.details.length : 1);
+        nodeConnCounts[e.source] = (nodeConnCounts[e.source] || 0) + cnt;
+        nodeConnCounts[e.target] = (nodeConnCounts[e.target] || 0) + cnt;
+      });
+
+      // 2. 节点根据连接数动态自适应尺寸（连接越多，节点卡片越大）
+      const nodes = topo.nodes.map(n => {
+        let style = colors[n.nodeType] || colors.server;
+        let baseW = 120;
+        let baseH = 36;
+        if (n.nodeType === 'server') {
+          baseW = 145;
+          baseH = 48;
+        }
+
+        const count = nodeConnCounts[n.id] || 1;
+        const scale = Math.min(Math.log2(count), 5); // 0 ~ 5 渐进放大
+        const width = Math.round(baseW + scale * 9);
+        const height = Math.round(baseH + scale * 4);
+
+        let comboId = undefined;
+        if (n.nodeType === 'service') {
+          comboId = 'combo_services';
+        } else if (n.nodeType === 'client') {
+          comboId = 'combo_inbound';
+        } else if (n.nodeType === 'outbound') {
+          comboId = 'combo_outbound';
+        }
+
+        let labelText = n.label;
+        if (n.is_container) {
+          labelText = '🐳 ' + labelText;
+        }
+
+        return {
+          id: n.id,
+          label: labelText,
+          nodeType: n.nodeType,
+          comboId: comboId,
+          is_container: n.is_container,
+          ip: n.ip,
+          port: n.port,
+          process: n.process,
+          proto: n.proto,
+          level: n.level || 1,
+          type: 'rect',
+          size: [width, height],
+          style: {
+            fill: style.fill,
+            stroke: style.stroke,
+            lineWidth: 2,
+            radius: 6,
+            cursor: 'pointer'
+          },
+          labelCfg: {
+            style: {
+              fill: style.text || '#f8fafc',
+              fontSize: 11,
+              fontWeight: n.nodeType === 'server' ? 'bold' : 'normal',
+              fontFamily: 'monospace'
+            }
+          }
+        };
+      });
+
+      // 3. 边处理：
+      // - 线型规范：UDP 统一虚线 [5, 4]，TCP 统一实线 undefined
+      // - 聚合规则：相同源、目标、协议(TCP/UDP)与类型达到阈值时聚合成一条边并显示数量，未达到时按单连接一条边展开
+      const edges = [];
+      (topo.edges || []).forEach(e => {
+        const count = e.connCount || (e.details ? e.details.length : 1);
+        const isListen = e.edgeType === 'listen';
+        const isUDP = (e.proto || '').toLowerCase().startsWith('udp');
+        const lineDash = isUDP ? [5, 4] : undefined; // UDP 用虚线，TCP 用实线
+
+        let stroke = colors.edgeInbound;
+        let endArrow = { path: G6.Arrow.triangle(6, 8, 0), fill: stroke };
+
+        if (e.edgeType === 'listen') {
+          stroke = colors.edgeLocal;
+          endArrow = { path: G6.Arrow.triangle(5, 6, 0), fill: stroke };
+        } else if (e.edgeType === 'internal') {
+          stroke = colors.edgeLocal;
+          endArrow = { path: G6.Arrow.triangle(6, 8, 0), fill: stroke };
+        } else if (e.edgeType === 'inbound') {
+          stroke = colors.edgeInbound;
+          endArrow = { path: G6.Arrow.triangle(6, 8, 0), fill: stroke };
+        } else if (e.edgeType === 'outbound') {
+          stroke = colors.edgeOutbound;
+          endArrow = { path: G6.Arrow.triangle(6, 8, 0), fill: stroke };
+        }
+
+        if (isListen || count >= aggregateThreshold) {
+          // 挂载边，或连接数达到阈值：聚合成一条边
+          let label = undefined;
+          if (!isListen && count > 1) {
+            label = count + ' conns'; // 聚合时只显示连接数量
+          }
+
+          edges.push({
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            label: label,
+            edgeType: e.edgeType,
+            proto: e.proto,
+            connCount: count,
+            details: e.details,
+            type: 'cubic-horizontal',
+            style: {
+              stroke: stroke,
+              lineWidth: isListen ? 1.5 : Math.min(2 + Math.log2(count), 7),
+              lineDash: lineDash,
+              endArrow: endArrow,
+              cursor: 'pointer'
+            },
+            labelCfg: label ? {
+              autoRotate: true,
+              style: {
+                fill: '#e2e8f0',
+                fontSize: 10,
+                fontFamily: 'monospace',
+                background: {
+                  fill: '#0f172a',
+                  stroke: '#334155',
+                  padding: [2, 5, 2, 5],
+                  radius: 3
+                }
+              }
+            } : undefined
+          });
+        } else {
+          // 连接数未达到阈值：一个连接一条边，边不显示任何描述
+          const details = e.details && e.details.length > 0 ? e.details : [{}];
+          const total = details.length;
+          details.forEach((d, idx) => {
+            let curveOffset = 0;
+            if (total > 1) {
+              curveOffset = (idx - (total - 1) / 2) * 14;
+            }
+            const singleProto = d.proto || e.proto || '';
+            const singleIsUDP = singleProto.toLowerCase().startsWith('udp');
+            const singleLineDash = singleIsUDP ? [5, 4] : undefined;
+
+            edges.push({
+              id: e.id + '_' + idx,
+              source: e.source,
+              target: e.target,
+              label: undefined, // 未聚合不显示描述
+              edgeType: e.edgeType,
+              proto: singleProto,
+              connCount: 1,
+              details: [d],
+              curveOffset: curveOffset,
+              type: 'cubic-horizontal',
+              style: {
+                stroke: stroke,
+                lineWidth: 1.5,
+                lineDash: singleLineDash,
+                endArrow: endArrow,
+                cursor: 'pointer'
+              }
+            });
+          });
+        }
+      });
+
+      const combos = [];
+      const hasServices = nodes.some(n => n.comboId === 'combo_services');
+      const hasInbound = nodes.some(n => n.comboId === 'combo_inbound');
+      const hasOutbound = nodes.some(n => n.comboId === 'combo_outbound');
+
+      if (hasInbound) {
+        combos.push({
+          id: 'combo_inbound',
+          label: '外部入站客户端 (Inbound)',
+          type: 'rect',
+          style: {
+            fill: 'rgba(6, 78, 59, 0.08)',
+            stroke: '#10b981',
+            lineWidth: 1.5,
+            lineDash: [4, 4],
+            radius: 8
+          },
+          labelCfg: {
+            position: 'top',
+            refY: 8,
+            style: {
+              fill: '#34d399',
+              fontSize: 12,
+              fontWeight: 'bold',
+              fontFamily: 'monospace'
+            }
+          }
+        });
+      }
+
+      if (hasServices) {
+        combos.push({
+          id: 'combo_services',
+          label: '本机服务进程 (Local Services)',
+          type: 'rect',
+          style: {
+            fill: 'rgba(30, 58, 138, 0.08)',
+            stroke: '#3b82f6',
+            lineWidth: 1.5,
+            lineDash: [4, 4],
+            radius: 8
+          },
+          labelCfg: {
+            position: 'top',
+            refY: 8,
+            style: {
+              fill: '#60a5fa',
+              fontSize: 12,
+              fontWeight: 'bold',
+              fontFamily: 'monospace'
+            }
+          }
+        });
+      }
+
+      if (hasOutbound) {
+        combos.push({
+          id: 'combo_outbound',
+          label: '外部出站目标 (Outbound)',
+          type: 'rect',
+          style: {
+            fill: 'rgba(76, 29, 149, 0.08)',
+            stroke: '#8b5cf6',
+            lineWidth: 1.5,
+            lineDash: [4, 4],
+            radius: 8
+          },
+          labelCfg: {
+            position: 'top',
+            refY: 8,
+            style: {
+              fill: '#a78bfa',
+              fontSize: 12,
+              fontWeight: 'bold',
+              fontFamily: 'monospace'
+            }
+          }
+        });
+      }
+
+      return { nodes, edges, combos };
+    }
+
+    const container = document.getElementById('container');
+    const width = container.scrollWidth;
+    const height = container.scrollHeight || 600;
+
+    const graph = new G6.Graph({
+      container: 'mountNode',
+      width,
+      height,
+      layout: {
+        type: 'dagre',
+        rankdir: 'LR',
+        align: 'UL',
+        nodesep: 35,
+        ranksep: 130,
+        controlPoints: true,
+        sortByCombo: true
+      },
+      fitView: true,
+      fitViewPadding: [40, 40, 40, 40],
+      groupByTypes: false,
+      modes: {
+        default: ['drag-canvas', 'zoom-canvas', 'drag-node', 'drag-combo']
+      },
+      defaultNode: {
+        type: 'rect'
+      },
+      defaultCombo: {
+        type: 'rect',
+        padding: [24, 16, 16, 16]
+      }
+    });
+
+    graph.on('afterlayout', () => {
+      if (isFirstRender) {
+        graph.fitView(40);
+        isFirstRender = false;
+      }
+    });
+
+    graph.on('node:click', e => {
+      const nodeItem = e.item;
+      const model = nodeItem.getModel();
+      showNodeDetails(model, nodeItem);
+      highlightRelations(nodeItem);
+    });
+
+    graph.on('edge:click', e => {
+      const edgeItem = e.item;
+      const model = edgeItem.getModel();
+      showEdgeDetails(model);
+    });
+
+    graph.on('canvas:click', () => {
+      clearHighlight();
+      document.getElementById('detailPanel').style.display = 'none';
+    });
+
+    function highlightRelations(nodeItem) {
+      clearHighlight();
+      graph.getNodes().forEach(n => {
+        graph.updateItem(n, { style: { opacity: 0.2 } });
+      });
+      graph.getEdges().forEach(e => {
+        graph.updateItem(e, { style: { opacity: 0.1 } });
+      });
+
+      graph.updateItem(nodeItem, { style: { opacity: 1, lineWidth: 3 } });
+
+      const edges = nodeItem.getEdges();
+      edges.forEach(edge => {
+        graph.updateItem(edge, { style: { opacity: 1, lineWidth: 3 } });
+        const source = edge.getSource();
+        const target = edge.getTarget();
+        graph.updateItem(source, { style: { opacity: 1 } });
+        graph.updateItem(target, { style: { opacity: 1 } });
+      });
+    }
+
+    function clearHighlight() {
+      graph.getNodes().forEach(n => {
+        graph.updateItem(n, { style: { opacity: 1, lineWidth: 2 } });
+      });
+      graph.getEdges().forEach(e => {
+        const m = e.getModel();
+        graph.updateItem(e, {
+          style: { opacity: 1, lineWidth: m.edgeType === 'listen' ? 1.5 : Math.min(2 + Math.log2(m.connCount || 1), 6) }
+        });
+      });
+    }
+
+    function showNodeDetails(model, nodeItem) {
+      const panel = document.getElementById('detailPanel');
+      const title = document.getElementById('detailTitle');
+      const content = document.getElementById('detailContent');
+
+      title.innerText = '节点详情: ' + (model.label ? model.label.replace('\n', ' ') : model.id);
+      let html = '<div style="font-size:12px; margin-bottom:8px;"><span style="color:#94a3b8;">类型:</span> ' + escapeHTML(model.nodeType) + '</div>';
+      if (model.is_container) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#38bdf8;">环境:</span> 🐳 容器实例 (Container)</div>';
+      if (model.ip) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#94a3b8;">IP 地址:</span> ' + escapeHTML(model.ip) + '</div>';
+      if (model.port) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#94a3b8;">端口:</span> ' + escapeHTML(model.port) + '</div>';
+      if (model.process) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#94a3b8;">进程:</span> ' + escapeHTML(model.process) + '</div>';
+
+      // 汇总当前节点所有关联边的对端节点连接数与 TCP 状态统计
+      const edges = nodeItem ? nodeItem.getEdges() : [];
+      const allDetails = [];
+      const tcpStates = {};
+      const peerMap = {};
+      let tcpCount = 0;
+      let udpCount = 0;
+
+      edges.forEach(edge => {
+        const m = edge.getModel();
+        const count = m.connCount || (m.details ? m.details.length : 1);
+        const peerNode = edge.getSource() === nodeItem ? edge.getTarget() : edge.getSource();
+        const peerModel = peerNode.getModel();
+        const peerId = peerModel.id;
+
+        if (!peerMap[peerId]) {
+          peerMap[peerId] = {
+            id: peerId,
+            label: peerModel.label ? peerModel.label.replace('\n', ' ') : peerId,
+            nodeType: peerModel.nodeType,
+            is_container: peerModel.is_container,
+            count: 0
+          };
+        }
+        peerMap[peerId].count += count;
+
+        if (m.details && m.details.length > 0) {
+          m.details.forEach(d => {
+            allDetails.push(d);
+            const proto = (d.proto || m.proto || '').toLowerCase();
+            if (proto.startsWith('tcp')) {
+              tcpCount++;
+              const st = d.state || 'UNKNOWN';
+              tcpStates[st] = (tcpStates[st] || 0) + 1;
+            } else if (proto.startsWith('udp')) {
+              udpCount++;
+            }
+          });
+        }
+      });
+
+      if (allDetails.length > 0) {
+        html += '<div style="font-size:12px; margin-top:8px; margin-bottom:8px;"><span style="color:#94a3b8;">关联连接总数:</span> <b style="color:#38bdf8;">' + allDetails.length + '</b> 条';
+        if (tcpCount > 0) html += ' <span style="color:#64748b;">(TCP: ' + tcpCount + (udpCount > 0 ? ', UDP: ' + udpCount : '') + ')</span>';
+        html += '</div>';
+
+        if (tcpCount > 0) {
+          html += '<div style="margin-bottom:10px;"><div style="font-size:11px; color:#94a3b8; margin-bottom:5px;">TCP 状态分布:</div><div style="display:flex; flex-wrap:wrap; gap:6px;">';
+          for (const [st, cnt] of Object.entries(tcpStates)) {
+            let badgeStyle = 'background: #1e293b; color: #94a3b8; border: 1px solid #334155;';
+            if (st === 'ESTABLISHED' || st === 'ESTAB') {
+              badgeStyle = 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #059669;';
+            } else if (st === 'TIME_WAIT' || st === 'TIME-WAIT') {
+              badgeStyle = 'background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid #d97706;';
+            } else if (st === 'CLOSE_WAIT' || st === 'CLOSE-WAIT') {
+              badgeStyle = 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #dc2626;';
+            } else if (st.startsWith('SYN')) {
+              badgeStyle = 'background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid #2563eb;';
+            }
+            html += '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:4px; font-size:11px; font-family:monospace; ' + badgeStyle + '">' +
+              '<span>' + escapeHTML(st) + '</span><b style="font-weight:bold;">' + escapeHTML(cnt) + '</b></span>';
+          }
+          html += '</div></div>';
+        }
+
+        // 渲染连接数 Top 10 对端节点列表
+        const topPeers = Object.values(peerMap).sort((a, b) => b.count - a.count).slice(0, 10);
+        if (topPeers.length > 0) {
+          html += '<h4 style="font-size:12px; color:#38bdf8; margin-top:12px; margin-bottom:6px;">连接数 Top 10 对端节点:</h4>';
+          html += '<div style="display:flex; flex-direction:column; gap:6px;">';
+          topPeers.forEach((peer, idx) => {
+            let typeBadge = '';
+            if (peer.nodeType === 'client') {
+              typeBadge = '<span style="color:#34d399; font-size:10px; background:rgba(6,78,59,0.5); padding:1px 4px; border-radius:3px;">入站</span>';
+            } else if (peer.nodeType === 'outbound') {
+              typeBadge = '<span style="color:#a78bfa; font-size:10px; background:rgba(76,29,149,0.5); padding:1px 4px; border-radius:3px;">出站</span>';
+            } else if (peer.nodeType === 'service') {
+              typeBadge = '<span style="color:#60a5fa; font-size:10px; background:rgba(30,58,138,0.5); padding:1px 4px; border-radius:3px;">服务</span>';
+            } else if (peer.nodeType === 'server') {
+              typeBadge = '<span style="color:#38bdf8; font-size:10px; background:rgba(30,58,138,0.5); padding:1px 4px; border-radius:3px;">本机</span>';
+            }
+
+            let rankColor = idx === 0 ? '#f59e0b' : (idx === 1 ? '#94a3b8' : (idx === 2 ? '#b45309' : '#64748b'));
+            const peerLabel = escapeHTML(peer.label);
+
+            html += '<div style="display:flex; align-items:center; justify-content:space-between; background:#0f172a; border:1px solid #334155; border-radius:4px; padding:6px 8px; font-size:11px;">' +
+              '<div style="display:flex; align-items:center; gap:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:75%;">' +
+              '<b style="color:' + rankColor + '; width:18px; font-family:monospace;">#' + (idx + 1) + '</b>' +
+              typeBadge +
+              '<span style="font-family:monospace; color:#f8fafc; overflow:hidden; text-overflow:ellipsis;" title="' + peerLabel + '">' + peerLabel + '</span>' +
+              '</div>' +
+              '<div style="font-weight:bold; color:#38bdf8; font-family:monospace;">' + escapeHTML(peer.count) + ' conns</div>' +
+              '</div>';
+          });
+          html += '</div>';
+        }
+      }
+
+      if (model.nodeType === 'server' && currentTopo && currentTopo.listening_ports) {
+        html += '<h4 style="font-size:12px; color:#38bdf8; margin-top:12px; margin-bottom:6px;">本地正在监听的服务列表:</h4>';
+        html += '<div style="max-height:160px; overflow-y:auto; font-size:11px; background:#0f172a; padding:8px; border-radius:4px;">';
+        currentTopo.listening_ports.forEach(p => {
+          html += '<div style="padding:2px 0; color:#34d399;">● ' + escapeHTML(p) + '</div>';
+        });
+        html += '</div>';
+      }
+
+      content.innerHTML = html;
+      panel.style.display = 'block';
+    }
+
+    function showEdgeDetails(model) {
+      const panel = document.getElementById('detailPanel');
+      const title = document.getElementById('detailTitle');
+      const content = document.getElementById('detailContent');
+
+      title.innerText = '连接 5 元组明细 (' + (model.connCount || 1) + ' 条)';
+      let html = '<div style="font-size:12px; margin-bottom:8px;">' +
+        '<span style="color:#94a3b8;">类型:</span> ' + escapeHTML(model.edgeType) +
+        ' | <span style="color:#94a3b8;">描述:</span> ' + escapeHTML(model.label || '-') + '</div>';
+
+      if (model.details && model.details.length > 0) {
+        html += '<table class="tuple-table">' +
+          '<thead><tr><th>协议</th><th>本地 (Local)</th><th>远端 (Remote)</th><th>状态</th><th>进程/PID</th></tr></thead>' +
+          '<tbody>';
+        model.details.forEach(d => {
+          let proc = d.process ? d.process : '-';
+          if (d.pid) proc += ' (' + d.pid + ')';
+          html += '<tr>' +
+            '<td>' + escapeHTML(d.proto) + '</td>' +
+            '<td>' + escapeHTML(d.local_raw) + '</td>' +
+            '<td>' + escapeHTML(d.remote_raw) + '</td>' +
+            '<td><span class="state-badge">' + escapeHTML(d.state) + '</span></td>' +
+            '<td>' + escapeHTML(proc) + '</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      content.innerHTML = html;
+      panel.style.display = 'block';
+    }
+
+    function onFilterChange() {
+      if (!currentTopo) return;
+      const showLocal = document.getElementById('chkLocal').checked;
+      const showInbound = document.getElementById('chkInbound').checked;
+      const showOutbound = document.getElementById('chkOutbound').checked;
+      const showTCP = document.getElementById('chkTCP').checked;
+      const showUDP = document.getElementById('chkUDP').checked;
+
+      const filtered = JSON.parse(JSON.stringify(currentTopo));
+      const validNodeIDs = new Set(['node_server']);
+
+      filtered.edges = (filtered.edges || []).filter(e => {
+        const isTCP = (e.proto || '').toLowerCase().startsWith('tcp');
+        const isUDP = (e.proto || '').toLowerCase().startsWith('udp');
+
+        if (!showTCP && isTCP) return false;
+        if (!showUDP && isUDP) return false;
+
+        // 根据多选显示范围过滤
+        if (e.edgeType === 'inbound') {
+          if (!showInbound) return false;
+        } else if (e.edgeType === 'outbound') {
+          if (!showOutbound) return false;
+        } else if (e.edgeType === 'internal' || e.edgeType === 'listen') {
+          if (!showLocal) return false;
+        }
+
+        validNodeIDs.add(e.source);
+        validNodeIDs.add(e.target);
+        return true;
+      });
+
+      filtered.nodes = (filtered.nodes || []).filter(n => {
+        if (n.id === 'node_server') return true;
+        if (n.nodeType === 'service' && showLocal) return true;
+        return validNodeIDs.has(n.id);
+      });
+
+      const updated = processG6Data(filtered);
+      graph.changeData(updated);
+    }
+
+    async function fetchTopology(force = false) {
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+      statusDot.className = 'status-dot loading';
+      statusText.innerText = '正在采集...';
+
+      try {
+        const url = '/api/topology' + (force ? '?force=1' : '');
+        const res = await fetch(url);
+        const json = await res.json();
+
+        if (json.error) {
+          statusDot.className = 'status-dot error';
+          statusText.innerText = '更新异常: ' + json.error;
+          return;
+        }
+
+        if (Number.isInteger(json.interval) && json.interval !== currentIntervalSec) {
+          currentIntervalSec = json.interval;
+          syncIntervalControl(currentIntervalSec);
+          setupTimer();
+        }
+
+        currentTopo = json.data;
+        onFilterChange();
+
+        statusDot.className = 'status-dot';
+        statusText.innerText = currentIntervalSec > 0 ? (currentIntervalSec + 's 自动刷新') : '';
+      } catch (err) {
+        statusDot.className = 'status-dot error';
+        statusText.innerText = '请求失败: ' + err.message;
+      }
+    }
+
+    function syncIntervalControl(interval) {
+      const select = document.getElementById('intervalSelect');
+      const value = String(interval);
+      if (![...select.options].some(option => option.value === value)) {
+        select.add(new Option(interval + ' 秒', value));
+      }
+      select.value = value;
+    }
+
+    async function changeInterval() {
+      const select = document.getElementById('intervalSelect');
+      const previousIntervalSec = currentIntervalSec;
+      const requestedIntervalSec = parseInt(select.value, 10);
+      const statusText = document.getElementById('statusText');
+      statusText.innerText = '正在更新刷新周期...';
+
+      try {
+        const response = await fetch('/api/interval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ interval: requestedIntervalSec })
+        });
+        if (!response.ok) {
+          throw new Error((await response.text()).trim() || response.statusText);
+        }
+        const result = await response.json();
+        currentIntervalSec = result.interval;
+        syncIntervalControl(currentIntervalSec);
+        setupTimer();
+        statusText.innerText = currentIntervalSec > 0 ? (currentIntervalSec + 's 自动刷新') : '';
+      } catch (err) {
+        currentIntervalSec = previousIntervalSec;
+        syncIntervalControl(currentIntervalSec);
+        statusText.innerText = '更新失败: ' + err.message;
+      }
+    }
+
+    function setupTimer() {
+      if (refreshTimer) {
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+      }
+      if (currentIntervalSec > 0) {
+        refreshTimer = setInterval(() => {
+          fetchTopology(false);
+        }, currentIntervalSec * 1000);
+      }
+    }
+
+    window.onload = () => {
+      syncIntervalControl(currentIntervalSec);
+      fetchTopology(false);
+      setupTimer();
+    };
+
+    window.onresize = () => {
+      if (!graph || graph.get('destroyed')) return;
+      graph.changeSize(container.scrollWidth, container.scrollHeight);
+    };
+  </script>
+</body>
+</html>

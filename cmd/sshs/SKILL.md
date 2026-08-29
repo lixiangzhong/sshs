@@ -47,6 +47,7 @@ description: 使用本地最新版 sshs 执行运维排障、主机巡检、命�
 6. SOCKS5 代理：`sshs socks5 -l <local-addr> [keyword...]`
 7. 批量执行：`sshs run -f <file>`（YAML 或 `.sh`）
 8. 批量巡检：`sshs inspect [keyword...]`
+9. 网络拓扑关系图：`sshs graph [keyword...]`（基于 AntV G6 可视化 TCP/UDP 拓扑）
 
 ## 常用命令
 
@@ -74,6 +75,14 @@ sshs inspect --timeout 5s --concurrency 20 prod
 ```
 
 指标：CPU规格与使用率(如 4C8T(13%))、内存容量与使用率(如 16G(50%))、磁盘挂载点明细表、TCP连接数、负载(1/5/15)、操作系统(含Uptime如 32d)、时间偏移与时区。失败/超时主机标记错误，不拖垮整批。
+
+**网络连接关系拓扑图（本地 Web 动态服务）：**
+
+```bash
+sshs graph prod-1                         # 启动本地 Web 服务并自动打开浏览器（默认 10s 自动刷新）
+sshs graph -i 20s prod-1                  # 可选：指定自动刷新间隔为 20s（也可在网页界面直接切换）
+sshs graph -l 127.0.0.1:8080 prod-1       # 可选：指定本地服务监听端口（默认随机分配）
+```
 
 **登录：**
 

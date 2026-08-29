@@ -56,6 +56,26 @@ func main() {
 				Action: InspectAction,
 			},
 			{
+				Name:      "graph",
+				Usage:     "visualize host tcp/udp network topology via local web server",
+				UsageText: "sshs graph [-i <dur>] [-l <addr>] [host keywords...]",
+				Flags: []cli.Flag{
+					&cli.DurationFlag{
+						Name:    "interval",
+						Aliases: []string{"i"},
+						Usage:   "auto-refresh interval (e.g. 10s, 20s)",
+						Value:   graphIntervalDefault,
+					},
+					&cli.StringFlag{
+						Name:    "addr",
+						Aliases: []string{"l"},
+						Usage:   "local web server listen address",
+						Value:   "127.0.0.1:0",
+					},
+				},
+				Action: GraphAction,
+			},
+			{
 				Name:      "scp",
 				Aliases:   []string{"cp"},
 				Usage:     "scp transfer file or dir",

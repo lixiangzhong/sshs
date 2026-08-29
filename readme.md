@@ -92,7 +92,22 @@ sshs inspect --timeout 5s --concurrency 20 prod
 
 巡检指标：负载(1/5/15)、CPU 使用率、内存使用率、磁盘使用率（最大挂载点入概览，明细表逐挂载点）、内核与发行版、与本地的时间偏移。单台拨号或采集失败会在对应行标记错误，超时标记为 `timeout`，不影响整批。
 
-注意：`list` 与 `inspect` 的 flags 必须写在主机关键词之前，例如 `sshs inspect --json prod`（不支持 `sshs inspect prod --json`）。
+注意：带主机关键词的子命令必须把 flags 写在关键词之前，例如 `sshs inspect --json prod`、`sshs graph -i 20s prod`。
+
+### 网络连接关系拓扑图 (graph)
+
+连接目标主机采集 TCP/UDP 网络连接（端口、状态、进程、客户端与出站连接），以本地随机端口启动轻量 Web 服务，提供 G6 交互式拓扑页面与 `/api/topology` 动态接口，并按指定时间间隔（默认 10 秒）自动定时刷新：
+
+```sh
+# 启动本地 Web 服务并在默认浏览器打开（默认 10s 自动刷新）
+sshs graph server1
+
+# 可选：指定自动刷新间隔为 20 秒（也可在网页界面下拉框直接切换）
+sshs graph -i 20s server1
+
+# 可选：指定本地服务监听端口（默认随机分配）
+sshs graph -l 127.0.0.1:8080 server1
+```
 
 ### ssh 登录
 

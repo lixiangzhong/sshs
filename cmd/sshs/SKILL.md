@@ -13,7 +13,7 @@ description: 使用本地最新版 sshs 执行运维排障、主机巡检、命�
 
 - 一律使用 `sshs` 命令；**不要改用原生 `ssh` / `scp` / `sftp`**。
 - `sshs exec <keyword> -- <command>` 中 `--` 之后的命令**在远程主机上执行**，由远程 shell 运行；不要把它们当成本地命令拼出去，也不要省略 `--`。
-- `list` / `inspect` / `exec` 的 flags 写在主机关键词之前（如 `sshs inspect --json prod`、`sshs exec --timeout 10s prod-1 -- uptime`）。
+- `list` / `inspect` / `graph` / `exec` 的 flags 写在主机关键词之前（如 `sshs inspect --json prod`、`sshs graph -i 20s prod-1`、`sshs exec --timeout 10s prod-1 -- uptime`）。
 
 ## 运维安全铁律与边界
 
@@ -47,7 +47,7 @@ description: 使用本地最新版 sshs 执行运维排障、主机巡检、命�
 6. SOCKS5 代理：`sshs socks5 -l <local-addr> [keyword...]`
 7. 批量执行：`sshs run -f <file>`（YAML 或 `.sh`）
 8. 批量巡检：`sshs inspect [keyword...]`
-9. 网络拓扑关系图：`sshs graph [keyword...]`（基于 AntV G6 可视化 TCP/UDP 拓扑）
+9. 网络拓扑关系图：`sshs graph [keyword...]`（别名 `g`、`topo`，基于 AntV G6 可视化 TCP/UDP 拓扑）
 
 ## 常用命令
 
@@ -79,7 +79,7 @@ sshs inspect --timeout 5s --concurrency 20 prod
 **网络连接关系拓扑图（本地 Web 动态服务）：**
 
 ```bash
-sshs graph prod-1                         # 启动本地 Web 服务并自动打开浏览器（默认 10s 自动刷新）
+sshs graph prod-1                         # 启动本地 Web 服务并自动打开浏览器（别名: sshs g 或 sshs topo）
 sshs graph -i 20s prod-1                  # 可选：指定自动刷新间隔为 20s（也可在网页界面直接切换）
 sshs graph -l 127.0.0.1:8080 prod-1       # 可选：指定本地服务监听端口（默认随机分配）
 ```

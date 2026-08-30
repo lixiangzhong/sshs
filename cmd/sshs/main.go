@@ -8,11 +8,20 @@ import (
 )
 
 // version 默认值供本地直接编译使用；发版时由 GoReleaser 通过 -ldflags 注入 tag 版本号
-var version = "1.19.0"
+var version = "1.20.1"
 
 func main() {
 	log.SetFlags(0)
-	app := &cli.App{
+	app := newApp()
+	err := app.Run(os.Args)
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+}
+
+func newApp() *cli.App {
+	return &cli.App{
 		Name:      "sshs",
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
@@ -57,6 +66,7 @@ func main() {
 			},
 			{
 				Name:      "graph",
+				Aliases:   []string{"g", "topo"},
 				Usage:     "visualize host tcp/udp network topology via local web server",
 				UsageText: "sshs graph [-i <dur>] [-l <addr>] [host keywords...]",
 				Flags: []cli.Flag{
@@ -219,10 +229,5 @@ scripts:
 				Action:    SkillAction,
 			},
 		},
-	}
-	err := app.Run(os.Args)
-	if err != nil {
-		log.Println(err)
-		os.Exit(1)
 	}
 }

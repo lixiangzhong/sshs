@@ -44,6 +44,7 @@
     .btn:hover { background: #38bdf8; color: #0f172a; }
     .btn.primary { background: #0284c7; border-color: #38bdf8; }
     .btn.primary:hover { background: #38bdf8; color: #0f172a; }
+    .btn.active { background: #0284c7; border-color: #38bdf8; color: #fff; font-weight: bold; }
     #container { width: 100%; height: calc(100vh - 46px); position: relative; }
     #mountNode { width: 100%; height: 100%; }
     .legend {
@@ -93,7 +94,7 @@
         <label><input type="checkbox" id="chkTCP" checked onchange="onFilterChange()"> TCP</label>
         <label><input type="checkbox" id="chkUDP" checked onchange="onFilterChange()"> UDP</label>
         <span style="margin-left: 6px;">聚合阈值:</span>
-        <input type="number" id="thresholdInput" value="10" min="2" max="100" style="width: 44px; text-align: center;" onchange="onThresholdChange(this.value)">
+        <input type="number" id="thresholdInput" value="3" min="2" max="100" style="width: 44px; text-align: center;" onchange="onThresholdChange(this.value)">
         <span style="margin-left: 6px;">定时刷新:</span>
         <select id="intervalSelect" onchange="changeInterval()">
           <option value="0" {{if eq .DefaultIntervalSec 0}}selected{{end}}>手动刷新</option>
@@ -102,8 +103,7 @@
           <option value="20" {{if eq .DefaultIntervalSec 20}}selected{{end}}>20 秒</option>
           <option value="30" {{if eq .DefaultIntervalSec 30}}selected{{end}}>30 秒</option>
         </select>
-        <button class="btn" onclick="graph.fitView(40)">居中</button>
-        <button class="btn primary" id="btnRefresh" onclick="fetchTopology(true)">刷新</button>
+        <button class="btn" id="btnLayout" onclick="toggleLayout()">📊 分层流向</button>
       </div>
     </div>
     <div class="header-right">
@@ -116,11 +116,11 @@
 
   <div id="container">
     <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background: #3b82f6;"></div>本机</div>
-      <div class="legend-item"><div class="legend-dot" style="background: #10b981;"></div>入站</div>
-      <div class="legend-item"><div class="legend-dot" style="background: #8b5cf6;"></div>出站</div>
-      <div class="legend-item" style="color: #cbd5e1; margin-left: 4px;">── TCP</div>
-      <div class="legend-item" style="color: #cbd5e1;">┄┄ UDP</div>
+      <div class="legend-item"><div class="legend-dot" style="background: #38bdf8;"></div><span id="legendServer">本机</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background: #10b981;"></div><span id="legendInbound">入站 (0)</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background: #f97316;"></div><span id="legendLocalClient">本机客户端 (0)</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background: #3b82f6;"></div><span id="legendService">本机服务 (0)</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background: #8b5cf6;"></div><span id="legendOutbound">出站 (0)</span></div>
     </div>
 
     <div id="detailPanel">
@@ -135,19 +135,21 @@
     let currentTopo = null;
     let refreshTimer = null;
     let currentIntervalSec = {{.DefaultIntervalSec}};
-    let aggregateThreshold = 10;     // 默认 10 条连接聚合为单条边
+    let aggregateThreshold = 3;      // 默认 3 条连接聚合为单条边
     let isFirstRender = true;
 
     // 配色统一规范：
-    // 本机体系（Server/Service进程/内部边/挂载边）: 蓝色系 (#3b82f6)
+    // 本机服务（Service进程/服务边）: 蓝色系 (#3b82f6)
+    // 本机客户端（LocalClient进程/内部发起）: 橙色系 (#f97316)
     // 外部入站体系（Client客户端/入站边）: 绿色系 (#10b981)
     // 外部出站体系（Outbound目标/出站边）: 紫色系 (#8b5cf6)
     const colors = {
       server: { fill: '#1e3a8a', stroke: '#3b82f6', text: '#eff6ff' },
       service: { fill: '#1d4ed8', stroke: '#60a5fa', text: '#eff6ff' },
+      local_client: { fill: '#7c2d12', stroke: '#f97316', text: '#fff7ed' },
       client: { fill: '#064e3b', stroke: '#10b981', text: '#ecfdf5' },
       outbound: { fill: '#4c1d95', stroke: '#8b5cf6', text: '#f5f3ff' },
-      edgeLocal: '#3b82f6',
+      edgeLocal: '#f97316',
       edgeInbound: '#10b981',
       edgeOutbound: '#8b5cf6'
     };
@@ -174,40 +176,45 @@
     function processG6Data(topo) {
       if (!topo || !topo.nodes) return { nodes: [], edges: [], combos: [] };
 
-      // 1. 统计每个节点的连接总数，用于驱动节点大小
+      // 1. 统计每个节点的边数 (degree) 与总连接数 (connCount)
+      const nodeEdgeCounts = {};
       const nodeConnCounts = {};
       (topo.edges || []).forEach(e => {
         const cnt = e.connCount || (e.details ? e.details.length : 1);
+        nodeEdgeCounts[e.source] = (nodeEdgeCounts[e.source] || 0) + 1;
+        nodeEdgeCounts[e.target] = (nodeEdgeCounts[e.target] || 0) + 1;
         nodeConnCounts[e.source] = (nodeConnCounts[e.source] || 0) + cnt;
         nodeConnCounts[e.target] = (nodeConnCounts[e.target] || 0) + cnt;
       });
 
-      // 2. 节点根据连接数动态自适应尺寸（连接越多，节点卡片越大）
+      // 2. 节点根据边数和连接数动态自适应尺寸（边越多、连接越多，节点显著放大且更突出）
       const nodes = topo.nodes.map(n => {
         let style = colors[n.nodeType] || colors.server;
-        let baseW = 120;
-        let baseH = 36;
-        if (n.nodeType === 'server') {
-          baseW = 145;
-          baseH = 48;
-        }
 
-        const count = nodeConnCounts[n.id] || 1;
-        const scale = Math.min(Math.log2(count), 5); // 0 ~ 5 渐进放大
-        const width = Math.round(baseW + scale * 9);
-        const height = Math.round(baseH + scale * 4);
+        const degree = nodeEdgeCounts[n.id] || 0;
+        const conns = nodeConnCounts[n.id] || 1;
+
+        // 基础直径 16px，每多 1 条关联边增加 3.5px 直径，连接数额外对数加成，最大可达 65px+
+        const degreeScale = Math.min(degree, 12) * 3.5;
+        const connScale = Math.min(Math.log2(conns), 6) * 2.5;
+        const nodeSize = Math.round(16 + degreeScale + connScale);
+        const strokeWidth = nodeSize >= 42 ? 3.5 : (nodeSize >= 28 ? 2.5 : 1.8);
 
         let comboId = undefined;
-        if (n.nodeType === 'service') {
-          comboId = 'combo_services';
-        } else if (n.nodeType === 'client') {
-          comboId = 'combo_inbound';
-        } else if (n.nodeType === 'outbound') {
-          comboId = 'combo_outbound';
+        if (currentLayoutType !== 'force') {
+          if (n.nodeType === 'service') {
+            comboId = 'combo_services';
+          } else if (n.nodeType === 'client') {
+            comboId = 'combo_inbound';
+          } else if (n.nodeType === 'local_client') {
+            comboId = 'combo_local_clients';
+          } else if (n.nodeType === 'outbound') {
+            comboId = 'combo_outbound';
+          }
         }
 
-        let labelText = n.label;
-        if (n.is_container) {
+        let labelText = String(n.label || '');
+        if (n.is_container && !labelText.startsWith('🐳')) {
           labelText = '🐳 ' + labelText;
         }
 
@@ -215,36 +222,101 @@
           id: n.id,
           label: labelText,
           nodeType: n.nodeType,
+          cluster: n.nodeType,
           comboId: comboId,
+          combo: comboId,
           is_container: n.is_container,
           ip: n.ip,
           port: n.port,
           process: n.process,
           proto: n.proto,
           level: n.level || 1,
-          type: 'rect',
-          size: [width, height],
+          type: 'circle',
+          size: nodeSize,
+          data: {
+            id: n.id,
+            label: labelText,
+            nodeType: n.nodeType,
+            cluster: n.nodeType,
+            is_container: n.is_container,
+            ip: n.ip,
+            port: n.port,
+            process: n.process,
+            proto: n.proto
+          },
           style: {
             fill: style.fill,
             stroke: style.stroke,
-            lineWidth: 2,
-            radius: 6,
-            cursor: 'pointer'
+            lineWidth: strokeWidth,
+            cursor: 'pointer',
+            size: nodeSize,
+            labelText: labelText,
+            labelPlacement: 'bottom',
+            labelFill: style.text || '#f8fafc',
+            labelFontSize: 11,
+            labelFontFamily: 'monospace'
           },
           labelCfg: {
+            position: 'bottom',
+            offset: 6,
             style: {
               fill: style.text || '#f8fafc',
               fontSize: 11,
-              fontWeight: n.nodeType === 'server' ? 'bold' : 'normal',
               fontFamily: 'monospace'
             }
           }
         };
       });
 
+      // 在 Force 力导向模式下添加本机中心节点，将服务和客户端进程连接在一起
+      if (currentLayoutType === 'force') {
+        const hostLabel = topo.host_name || '本机';
+        nodes.push({
+          id: 'node_server',
+          label: hostLabel,
+          nodeType: 'server',
+          cluster: 'server',
+          ip: topo.host_ip,
+          level: 2.5,
+          type: 'circle',
+          size: 32,
+          data: {
+            id: 'node_server',
+            label: hostLabel,
+            nodeType: 'server',
+            cluster: 'server',
+            ip: topo.host_ip
+          },
+          style: {
+            fill: '#0f172a',
+            stroke: '#38bdf8',
+            lineWidth: 3,
+            cursor: 'pointer',
+            size: 32,
+            labelText: hostLabel,
+            labelPlacement: 'bottom',
+            labelFill: '#38bdf8',
+            labelFontSize: 12,
+            labelFontWeight: 'bold',
+            labelFontFamily: 'monospace'
+          },
+          labelCfg: {
+            position: 'bottom',
+            offset: 6,
+            style: {
+              fill: '#38bdf8',
+              fontSize: 12,
+              fontWeight: 'bold',
+              fontFamily: 'monospace'
+            }
+          }
+        });
+      }
+
       // 3. 边处理：
-      // - 线型规范：UDP 统一虚线 [5, 4]，TCP 统一实线 undefined
-      // - 聚合规则：相同源、目标、协议(TCP/UDP)与类型达到阈值时聚合成一条边并显示数量，未达到时按单连接一条边展开
+      // - 线型规范：Force 模式统一使用 line，Dagre 模式统一使用 cubic-horizontal
+      // - UDP 统一虚线 [5, 4]，TCP 统一实线 undefined
+      const edgeShapeType = currentLayoutType === 'force' ? 'line' : 'cubic-horizontal';
       const edges = [];
       (topo.edges || []).forEach(e => {
         const count = e.connCount || (e.details ? e.details.length : 1);
@@ -285,13 +357,25 @@
             proto: e.proto,
             connCount: count,
             details: e.details,
-            type: 'cubic-horizontal',
+            type: edgeShapeType,
+            data: {
+              id: e.id,
+              edgeType: e.edgeType,
+              proto: e.proto,
+              connCount: count,
+              details: e.details
+            },
             style: {
               stroke: stroke,
               lineWidth: isListen ? 1.5 : Math.min(2 + Math.log2(count), 7),
               lineDash: lineDash,
               endArrow: endArrow,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              labelText: label,
+              labelBackground: !!label,
+              labelFill: '#e2e8f0',
+              labelFontSize: 10,
+              labelFontFamily: 'monospace'
             },
             labelCfg: label ? {
               autoRotate: true,
@@ -314,7 +398,7 @@
           const total = details.length;
           details.forEach((d, idx) => {
             let curveOffset = 0;
-            if (total > 1) {
+            if (total > 1 && edgeShapeType !== 'line') {
               curveOffset = (idx - (total - 1) / 2) * 14;
             }
             const singleProto = d.proto || e.proto || '';
@@ -331,7 +415,14 @@
               connCount: 1,
               details: [d],
               curveOffset: curveOffset,
-              type: 'cubic-horizontal',
+              type: edgeShapeType,
+              data: {
+                id: e.id + '_' + idx,
+                edgeType: e.edgeType,
+                proto: singleProto,
+                connCount: 1,
+                details: [d]
+              },
               style: {
                 stroke: stroke,
                 lineWidth: 1.5,
@@ -344,98 +435,218 @@
         }
       });
 
+      // 在 Force 模式下为本机服务与客户端进程建立与本机中心节点的关联边
+      if (currentLayoutType === 'force') {
+        nodes.forEach(n => {
+          if (n.nodeType === 'service') {
+            edges.push({
+              id: 'host_srv_' + n.id,
+              source: 'node_server',
+              target: n.id,
+              edgeType: 'internal',
+              type: 'line',
+              style: {
+                stroke: 'rgba(96, 165, 250, 0.45)',
+                lineWidth: 1.5,
+                lineDash: [3, 3]
+              }
+            });
+          } else if (n.nodeType === 'local_client') {
+            edges.push({
+              id: 'host_client_' + n.id,
+              source: 'node_server',
+              target: n.id,
+              edgeType: 'internal',
+              type: 'line',
+              style: {
+                stroke: 'rgba(249, 115, 22, 0.45)',
+                lineWidth: 1.5,
+                lineDash: [3, 3]
+              }
+            });
+          }
+        });
+      }
+
       const combos = [];
-      const hasServices = nodes.some(n => n.comboId === 'combo_services');
-      const hasInbound = nodes.some(n => n.comboId === 'combo_inbound');
-      const hasOutbound = nodes.some(n => n.comboId === 'combo_outbound');
+      if (currentLayoutType !== 'force') {
+        const hasInbound = nodes.some(n => n.comboId === 'combo_inbound');
+        const hasLocalClients = nodes.some(n => n.comboId === 'combo_local_clients');
+        const hasServices = nodes.some(n => n.comboId === 'combo_services');
+        const hasOutbound = nodes.some(n => n.comboId === 'combo_outbound');
 
-      if (hasInbound) {
-        combos.push({
-          id: 'combo_inbound',
-          label: '外部入站客户端 (Inbound)',
-          type: 'rect',
-          style: {
-            fill: 'rgba(6, 78, 59, 0.08)',
-            stroke: '#10b981',
-            lineWidth: 1.5,
-            lineDash: [4, 4],
-            radius: 8
-          },
-          labelCfg: {
-            position: 'top',
-            refY: 8,
+        if (hasInbound) {
+          combos.push({
+            id: 'combo_inbound',
+            label: '外部入站客户端 (Inbound)',
+            type: 'rect',
+            data: { label: '外部入站客户端 (Inbound)' },
             style: {
-              fill: '#34d399',
-              fontSize: 12,
-              fontWeight: 'bold',
-              fontFamily: 'monospace'
+              fill: 'rgba(6, 78, 59, 0.08)',
+              stroke: '#10b981',
+              lineWidth: 1.5,
+              lineDash: [4, 4],
+              radius: 8,
+              padding: 20,
+              labelText: '外部入站客户端 (Inbound)',
+              labelPlacement: 'top',
+              labelFill: '#34d399',
+              labelFontSize: 12,
+              labelFontWeight: 'bold',
+              labelFontFamily: 'monospace'
+            },
+            labelCfg: {
+              position: 'top',
+              refY: 8,
+              style: {
+                fill: '#34d399',
+                fontSize: 12,
+                fontWeight: 'bold',
+                fontFamily: 'monospace'
+              }
             }
-          }
-        });
+          });
+        }
+
+        if (hasLocalClients) {
+          combos.push({
+            id: 'combo_local_clients',
+            label: '本机客户端进程 (Local Clients)',
+            type: 'rect',
+            data: { label: '本机客户端进程 (Local Clients)' },
+            style: {
+              fill: 'rgba(234, 88, 12, 0.08)',
+              stroke: '#f97316',
+              lineWidth: 1.5,
+              lineDash: [4, 4],
+              radius: 8,
+              padding: 20,
+              labelText: '本机客户端进程 (Local Clients)',
+              labelPlacement: 'top',
+              labelFill: '#fdba74',
+              labelFontSize: 12,
+              labelFontWeight: 'bold',
+              labelFontFamily: 'monospace'
+            },
+            labelCfg: {
+              position: 'top',
+              refY: 8,
+              style: {
+                fill: '#fdba74',
+                fontSize: 12,
+                fontWeight: 'bold',
+                fontFamily: 'monospace'
+              }
+            }
+          });
+        }
+
+        if (hasServices) {
+          combos.push({
+            id: 'combo_services',
+            label: '本机服务进程 (Local Services)',
+            type: 'rect',
+            data: { label: '本机服务进程 (Local Services)' },
+            style: {
+              fill: 'rgba(30, 58, 138, 0.08)',
+              stroke: '#3b82f6',
+              lineWidth: 1.5,
+              lineDash: [4, 4],
+              radius: 8,
+              padding: 20,
+              labelText: '本机服务进程 (Local Services)',
+              labelPlacement: 'top',
+              labelFill: '#60a5fa',
+              labelFontSize: 12,
+              labelFontWeight: 'bold',
+              labelFontFamily: 'monospace'
+            },
+            labelCfg: {
+              position: 'top',
+              refY: 8,
+              style: {
+                fill: '#60a5fa',
+                fontSize: 12,
+                fontWeight: 'bold',
+                fontFamily: 'monospace'
+              }
+            }
+          });
+        }
+
+        if (hasOutbound) {
+          combos.push({
+            id: 'combo_outbound',
+            label: '外部出站目标 (Outbound)',
+            type: 'rect',
+            data: { label: '外部出站目标 (Outbound)' },
+            style: {
+              fill: 'rgba(76, 29, 149, 0.08)',
+              stroke: '#8b5cf6',
+              lineWidth: 1.5,
+              lineDash: [4, 4],
+              radius: 8,
+              padding: 20,
+              labelText: '外部出站目标 (Outbound)',
+              labelPlacement: 'top',
+              labelFill: '#a78bfa',
+              labelFontSize: 12,
+              labelFontWeight: 'bold',
+              labelFontFamily: 'monospace'
+            },
+            labelCfg: {
+              position: 'top',
+              refY: 8,
+              style: {
+                fill: '#a78bfa',
+                fontSize: 12,
+                fontWeight: 'bold',
+                fontFamily: 'monospace'
+              }
+            }
+          });
+        }
       }
 
-      if (hasServices) {
-        combos.push({
-          id: 'combo_services',
-          label: '本机服务进程 (Local Services)',
-          type: 'rect',
-          style: {
-            fill: 'rgba(30, 58, 138, 0.08)',
-            stroke: '#3b82f6',
-            lineWidth: 1.5,
-            lineDash: [4, 4],
-            radius: 8
-          },
-          labelCfg: {
-            position: 'top',
-            refY: 8,
-            style: {
-              fill: '#60a5fa',
-              fontSize: 12,
-              fontWeight: 'bold',
-              fontFamily: 'monospace'
-            }
-          }
-        });
-      }
-
-      if (hasOutbound) {
-        combos.push({
-          id: 'combo_outbound',
-          label: '外部出站目标 (Outbound)',
-          type: 'rect',
-          style: {
-            fill: 'rgba(76, 29, 149, 0.08)',
-            stroke: '#8b5cf6',
-            lineWidth: 1.5,
-            lineDash: [4, 4],
-            radius: 8
-          },
-          labelCfg: {
-            position: 'top',
-            refY: 8,
-            style: {
-              fill: '#a78bfa',
-              fontSize: 12,
-              fontWeight: 'bold',
-              fontFamily: 'monospace'
-            }
-          }
-        });
-      }
-
+      updateLegendCounts(nodes);
       return { nodes, edges, combos };
+    }
+
+    function updateLegendCounts(nodes) {
+      const counts = {
+        server: 0,
+        client: 0,
+        local_client: 0,
+        service: 0,
+        outbound: 0
+      };
+
+      (nodes || []).forEach(n => {
+        const type = n.nodeType || (n.data && n.data.nodeType);
+        if (counts.hasOwnProperty(type)) {
+          counts[type]++;
+        }
+      });
+
+      const elServer = document.getElementById('legendServer');
+      const elInbound = document.getElementById('legendInbound');
+      const elLocalClient = document.getElementById('legendLocalClient');
+      const elService = document.getElementById('legendService');
+      const elOutbound = document.getElementById('legendOutbound');
+
+      if (elServer) elServer.innerText = '本机' + (counts.server > 0 ? ' (' + counts.server + ')' : '');
+      if (elInbound) elInbound.innerText = '入站 (' + counts.client + ')';
+      if (elLocalClient) elLocalClient.innerText = '本机客户端 (' + counts.local_client + ')';
+      if (elService) elService.innerText = '本机服务 (' + counts.service + ')';
+      if (elOutbound) elOutbound.innerText = '出站 (' + counts.outbound + ')';
     }
 
     const container = document.getElementById('container');
     const width = container.scrollWidth;
     const height = container.scrollHeight || 600;
 
-    const graph = new G6.Graph({
-      container: 'mountNode',
-      width,
-      height,
-      layout: {
+    const layoutConfigs = {
+      dagre: {
         type: 'dagre',
         rankdir: 'LR',
         align: 'UL',
@@ -444,14 +655,54 @@
         controlPoints: true,
         sortByCombo: true
       },
+      force: {
+        type: 'force',
+        linkDistance: 85,
+        clustering: true,
+        nodeClusterBy: 'cluster',
+        clusterNodeStrength: 70,
+        preventOverlap: true,
+        nodeSpacing: 25,
+        nodeStrength: 80,
+        collideStrength: 0.85
+      }
+    };
+
+    let currentLayoutType = 'force';
+
+    function toggleLayout() {
+      const btn = document.getElementById('btnLayout');
+      if (currentLayoutType === 'force') {
+        currentLayoutType = 'dagre';
+        graph.updateLayout(layoutConfigs.dagre);
+        btn.innerText = '⚡ Force 聚类';
+        btn.classList.add('active');
+      } else {
+        currentLayoutType = 'force';
+        graph.updateLayout(layoutConfigs.force);
+        btn.innerText = '📊 分层流向';
+        btn.classList.remove('active');
+      }
+      onFilterChange();
+      setTimeout(() => {
+        graph.fitView(40);
+      }, 350);
+    }
+
+    const graph = new G6.Graph({
+      container: 'mountNode',
+      width,
+      height,
+      layout: layoutConfigs.force,
       fitView: true,
       fitViewPadding: [40, 40, 40, 40],
       groupByTypes: false,
+      behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element'],
       modes: {
         default: ['drag-canvas', 'zoom-canvas', 'drag-node', 'drag-combo']
       },
       defaultNode: {
-        type: 'rect'
+        type: 'circle'
       },
       defaultCombo: {
         type: 'rect',
@@ -522,8 +773,14 @@
       const title = document.getElementById('detailTitle');
       const content = document.getElementById('detailContent');
 
+      let typeLabel = escapeHTML(model.nodeType);
+      if (model.nodeType === 'service') typeLabel = '本机服务进程 (Local Service)';
+      else if (model.nodeType === 'local_client') typeLabel = '本机客户端进程 (Local Client)';
+      else if (model.nodeType === 'client') typeLabel = '外部入站客户端 (Inbound Client)';
+      else if (model.nodeType === 'outbound') typeLabel = '外部出站目标 (Outbound Target)';
+
       title.innerText = '节点详情: ' + (model.label ? model.label.replace('\n', ' ') : model.id);
-      let html = '<div style="font-size:12px; margin-bottom:8px;"><span style="color:#94a3b8;">类型:</span> ' + escapeHTML(model.nodeType) + '</div>';
+      let html = '<div style="font-size:12px; margin-bottom:8px;"><span style="color:#94a3b8;">类型:</span> ' + typeLabel + '</div>';
       if (model.is_container) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#38bdf8;">环境:</span> 🐳 容器实例 (Container)</div>';
       if (model.ip) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#94a3b8;">IP 地址:</span> ' + escapeHTML(model.ip) + '</div>';
       if (model.port) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#94a3b8;">端口:</span> ' + escapeHTML(model.port) + '</div>';

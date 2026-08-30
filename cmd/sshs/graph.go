@@ -45,29 +45,41 @@ hostname -I 2>/dev/null || ip -o -4 addr show | awk '{print $4}' | cut -d/ -f1 2
 
 echo "===CONTAINERS==="
 if command -v docker >/dev/null 2>&1; then
-  docker ps --format "{{.Names}}\t{{.Ports}}" 2>/dev/null || true
+  docker ps -a --no-trunc --format "{{.Names}}\t{{.Ports}}" 2>/dev/null || docker ps --format "{{.Names}}\t{{.Ports}}" 2>/dev/null || true
 fi
 if command -v podman >/dev/null 2>&1; then
-  podman ps --format "{{.Names}}\t{{.Ports}}" 2>/dev/null || true
+  podman ps -a --no-trunc --format "{{.Names}}\t{{.Ports}}" 2>/dev/null || true
 fi
 if command -v nerdctl >/dev/null 2>&1; then
-  nerdctl ps --format "{{.Names}}\t{{.Ports}}" 2>/dev/null || true
+  nerdctl ps -a --no-trunc --format "{{.Names}}\t{{.Ports}}" 2>/dev/null || true
 fi
 
 echo "===CONTAINER_IPS==="
 if command -v docker >/dev/null 2>&1; then
-  for id in $(docker ps -q 2>/dev/null); do
-    docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$id" 2>/dev/null || true
+  for cid in $(docker ps -q 2>/dev/null); do
+    name=$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##')
+    pid=$(docker inspect --format '{{.State.Pid}}' "$cid" 2>/dev/null)
+    ips=$(docker inspect --format '{{.NetworkSettings.IPAddress}} {{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$cid" 2>/dev/null)
+    ports=$(docker inspect --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' "$cid" 2>/dev/null)
+    echo "$name|$pid|$ips|$ports"
   done
 fi
 if command -v podman >/dev/null 2>&1; then
-  for id in $(podman ps -q 2>/dev/null); do
-    podman inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$id" 2>/dev/null || true
+  for cid in $(podman ps -q 2>/dev/null); do
+    name=$(podman inspect --format '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##')
+    pid=$(podman inspect --format '{{.State.Pid}}' "$cid" 2>/dev/null)
+    ips=$(podman inspect --format '{{.NetworkSettings.IPAddress}} {{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$cid" 2>/dev/null)
+    ports=$(podman inspect --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' "$cid" 2>/dev/null)
+    echo "$name|$pid|$ips|$ports"
   done
 fi
 if command -v nerdctl >/dev/null 2>&1; then
-  for id in $(nerdctl ps -q 2>/dev/null); do
-    nerdctl inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$id" 2>/dev/null || true
+  for cid in $(nerdctl ps -q 2>/dev/null); do
+    name=$(nerdctl inspect --format '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##')
+    pid=$(nerdctl inspect --format '{{.State.Pid}}' "$cid" 2>/dev/null)
+    ips=$(nerdctl inspect --format '{{.NetworkSettings.IPAddress}} {{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$cid" 2>/dev/null)
+    ports=$(nerdctl inspect --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' "$cid" 2>/dev/null)
+    echo "$name|$pid|$ips|$ports"
   done
 fi
 
@@ -142,6 +154,7 @@ type TopologyData struct {
 		TotalConns     int `json:"total_conns"`
 		ListeningCount int `json:"listening_count"`
 		InboundClients int `json:"inbound_clients"`
+		LocalClients   int `json:"local_clients"`
 		OutboundCount  int `json:"outbound_count"`
 		TCPCount       int `json:"tcp_count"`
 		UDPCount       int `json:"udp_count"`
@@ -521,26 +534,32 @@ func collectAndBuildTopology(parent context.Context, client *ssh.Client, hostCfg
 		return nil, fmt.Errorf("collect network data: %w", err)
 	}
 
-	conns, meta, knownLocalIPs, dockerPortMap := parseGraphCollectOutput(string(out))
+	conns, meta, knownLocalIPs, dockerPortMap, containerIPMap := parseGraphCollectOutput(string(out))
 	hostName := meta["hostname"]
 	if hostName == "" {
 		hostName = hostCfg.Name
 	}
 
-	topo := buildTopology(hostName, hostCfg.Host, conns, knownLocalIPs, dockerPortMap)
+	topo := buildTopology(hostName, hostCfg.Host, conns, knownLocalIPs, dockerPortMap, containerIPMap)
 	return topo, nil
 }
 
-func parseGraphCollectOutput(out string) ([]RawConn, map[string]string, []string, map[int]string) {
+var (
+	rePort       = regexp.MustCompile(`:(\d+)->`)
+	reSSProcName = regexp.MustCompile(`"([^"]+)"`)
+	reSSPID      = regexp.MustCompile(`pid=(\d+)`)
+	reSanitizeID = regexp.MustCompile(`[^a-zA-Z0-9_]`)
+)
+
+func parseGraphCollectOutput(out string) ([]RawConn, map[string]string, []string, map[int]string, map[string]string) {
 	meta := make(map[string]string)
 	var conns []RawConn
 	var knownLocalIPs []string
 	dockerPortMap := make(map[int]string)
+	containerIPMap := make(map[string]string)
 	lines := strings.Split(out, "\n")
 	mode := ""
 	netType := ""
-
-	rePort := regexp.MustCompile(`:(\d+)->`)
 
 	for _, rawLine := range lines {
 		line := strings.TrimSpace(rawLine)
@@ -591,9 +610,52 @@ func parseGraphCollectOutput(out string) ([]RawConn, map[string]string, []string
 		}
 
 		if mode == "container_ips" {
-			for _, ipStr := range strings.Fields(line) {
-				if net.ParseIP(ipStr) != nil {
-					knownLocalIPs = append(knownLocalIPs, ipStr)
+			if strings.Contains(line, "|") {
+				parts := strings.Split(line, "|")
+				name := strings.TrimPrefix(strings.TrimSpace(parts[0]), "/")
+				var ipsPart, portsPart string
+				if len(parts) >= 4 {
+					// 格式: name|pid|ips|ports
+					ipsPart = parts[2]
+					portsPart = parts[3]
+				} else if len(parts) == 3 {
+					// 格式: name|ips|ports
+					ipsPart = parts[1]
+					portsPart = parts[2]
+				} else if len(parts) == 2 {
+					// 格式: name|ips
+					ipsPart = parts[1]
+				}
+
+				for _, ipStr := range strings.Fields(ipsPart) {
+					if net.ParseIP(ipStr) != nil {
+						knownLocalIPs = append(knownLocalIPs, ipStr)
+						if name != "" {
+							containerIPMap[ipStr] = name
+						}
+					}
+				}
+				for _, portStr := range strings.Fields(portsPart) {
+					if p, err := strconv.Atoi(portStr); err == nil && p > 0 && name != "" {
+						dockerPortMap[p] = name
+					}
+				}
+			} else {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					name := strings.TrimPrefix(fields[0], "/")
+					for _, ipStr := range fields[1:] {
+						if net.ParseIP(ipStr) != nil {
+							knownLocalIPs = append(knownLocalIPs, ipStr)
+							containerIPMap[ipStr] = name
+						}
+					}
+				} else {
+					for _, ipStr := range fields {
+						if net.ParseIP(ipStr) != nil {
+							knownLocalIPs = append(knownLocalIPs, ipStr)
+						}
+					}
 				}
 			}
 			continue
@@ -602,7 +664,10 @@ func parseGraphCollectOutput(out string) ([]RawConn, map[string]string, []string
 		if mode == "containers" {
 			parts := strings.SplitN(line, "\t", 2)
 			if len(parts) >= 2 {
-				containerName := strings.TrimSpace(parts[0])
+				containerName := strings.TrimPrefix(strings.TrimSpace(parts[0]), "/")
+				if idx := strings.Index(containerName, ","); idx != -1 {
+					containerName = strings.TrimSpace(containerName[:idx])
+				}
 				portsStr := parts[1]
 				matches := rePort.FindAllStringSubmatch(portsStr, -1)
 				for _, m := range matches {
@@ -639,7 +704,7 @@ func parseGraphCollectOutput(out string) ([]RawConn, map[string]string, []string
 		}
 	}
 
-	return conns, meta, knownLocalIPs, dockerPortMap
+	return conns, meta, knownLocalIPs, dockerPortMap, containerIPMap
 }
 
 func parseSSLine(line string) (RawConn, bool) {
@@ -824,16 +889,13 @@ func normalizeState(s string) string {
 }
 
 func extractProcessAndPID(s string) (string, int) {
-	reName := regexp.MustCompile(`"([^"]+)"`)
-	rePID := regexp.MustCompile(`pid=(\d+)`)
-
 	var name string
 	var pid int
 
-	if matches := reName.FindStringSubmatch(s); len(matches) > 1 {
+	if matches := reSSProcName.FindStringSubmatch(s); len(matches) > 1 {
 		name = matches[1]
 	}
-	if matches := rePID.FindStringSubmatch(s); len(matches) > 1 {
+	if matches := reSSPID.FindStringSubmatch(s); len(matches) > 1 {
 		pid, _ = strconv.Atoi(matches[1])
 	}
 	return name, pid
@@ -880,43 +942,114 @@ func isLocalOrContainerIP(remoteIP, hostIP string, knownLocalIPs []string) bool 
 
 func isContainerProxyProcess(proc string) bool {
 	proc = strings.ToLower(strings.TrimSpace(proc))
+	if proc == "" {
+		return false
+	}
 	switch proc {
-	case "", "docker-proxy", "rootlessport", "slirp4netns", "pasta", "conmon", "nerdctl", "podman":
+	case "docker-proxy", "rootlessport", "slirp4netns", "pasta", "conmon", "nerdctl", "podman", "containerd-shim", "runc":
 		return true
 	default:
 		return false
 	}
 }
 
-func resolveProcName(rawProc string, port int, protoBase string, containerPortMap map[int]string) (string, bool) {
+func isDockerBridgeSubnet(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		return false
+	}
+	// Docker 常用默认子网 172.17.0.0/16 ~ 172.31.0.0/16
+	if ipv4[0] == 172 && ipv4[1] >= 17 && ipv4[1] <= 31 {
+		return true
+	}
+	return false
+}
+
+func resolveServiceProcName(rawProc, localIP string, localPort int, protoBase string, dockerPortMap map[int]string, containerIPMap map[string]string) (string, bool) {
+	// 1. 本地端口命中暴露容器端口映射
+	if cName, ok := dockerPortMap[localPort]; ok && cName != "" {
+		return cName, true
+	}
+
+	// 2. 本地 IP 命中已知容器 IP
+	if cName, ok := containerIPMap[localIP]; ok && cName != "" {
+		return cName, true
+	}
+
+	// 3. 进程名是容器代理进程（docker-proxy等）
 	if isContainerProxyProcess(rawProc) {
-		if cName, ok := containerPortMap[port]; ok && cName != "" {
+		if cName, ok := dockerPortMap[localPort]; ok && cName != "" {
 			return cName, true
 		}
+		if rawProc != "" {
+			return rawProc, true
+		}
+		return "docker-proxy", true
 	}
+
+	// 4. 真实业务进程名
+	rawProc = strings.TrimSpace(rawProc)
 	if rawProc != "" {
 		return rawProc, false
 	}
+
 	return protoBase, false
 }
 
-// buildTopology 构建 [remoteip:port] -> [mysql:3306] -> [server] -> [tcp://remoteip:port] 链路拓扑
-// 本机与 Docker 内部连接直接从 [server] -> [mysql:3306]
-func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []string, dockerPortMap map[int]string) *TopologyData {
+func resolveClientProcName(rawProc, localIP string, localPort int, remoteIP string, remotePort int, protoBase string, dockerPortMap map[int]string, containerIPMap map[string]string) (string, bool) {
+	// 1. 本地 IP 命中已知容器 IP，说明该客户端来自对应容器
+	if cName, ok := containerIPMap[localIP]; ok && cName != "" {
+		return cName, true
+	}
+
+	// 2. 本地端口命中已知容器暴露端口
+	if cName, ok := dockerPortMap[localPort]; ok && cName != "" {
+		return cName, true
+	}
+
+	// 3. 进程名若为容器代理进程（docker-proxy、rootlessport、conmon、podman等）
+	if isContainerProxyProcess(rawProc) {
+		if cName, ok := dockerPortMap[localPort]; ok && cName != "" {
+			return cName, true
+		}
+		if cName, ok := dockerPortMap[remotePort]; ok && cName != "" {
+			return cName, true
+		}
+		if cName, ok := containerIPMap[remoteIP]; ok && cName != "" {
+			return cName, true
+		}
+		if rawProc != "" {
+			return rawProc, true
+		}
+		return "docker-proxy", true
+	}
+
+	// 4. 进程名已知且不为空
+	rawProc = strings.TrimSpace(rawProc)
+	if rawProc != "" {
+		return rawProc, false
+	}
+
+	// 5. 若本地 IP 属于容器私网网段但未能在名称表中匹配到名字
+	if isDockerBridgeSubnet(localIP) {
+		return localIP, true
+	}
+
+	// 6. 兜底默认值
+	return "local-client", false
+}
+
+// buildTopology 构建 [inbound_client] -> [service] 且 [local_client] -> [service / outbound] 链路拓扑
+func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []string, dockerPortMap map[int]string, containerIPMap map[string]string) *TopologyData {
 	topo := &TopologyData{
 		HostName:    hostName,
 		HostIP:      hostIP,
 		CollectedAt: time.Now().Format("2006-01-02 15:04:05"),
 		RawConns:    conns,
-	}
-
-	serverNodeID := "node_server"
-	serverLabel := "server"
-	if hostName != "" {
-		serverLabel = hostName
-	}
-	if hostIP != "" {
-		serverLabel = fmt.Sprintf("%s\n(%s)", serverLabel, hostIP)
 	}
 
 	// 1. 提取所有本地监听服务配置
@@ -927,7 +1060,7 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 			key := fmt.Sprintf("%s_%d", protoBase, c.LocalPort)
 			listeningMap[key] = c
 
-			procName, isContainer := resolveProcName(c.Process, c.LocalPort, protoBase, dockerPortMap)
+			procName, isContainer := resolveServiceProcName(c.Process, c.LocalIP, c.LocalPort, protoBase, dockerPortMap, containerIPMap)
 			serviceLabel := fmt.Sprintf("%s:%d", procName, c.LocalPort)
 			if isContainer {
 				serviceLabel = "🐳 " + serviceLabel
@@ -937,17 +1070,9 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 	}
 	sort.Strings(topo.ListeningPorts)
 
-	// 添加本服务器节点 [server] (Level 3)
-	topo.Nodes = append(topo.Nodes, GraphNode{
-		ID:       serverNodeID,
-		Label:    serverLabel,
-		NodeType: "server",
-		IP:       hostIP,
-		Level:    3,
-	})
-
-	// 2. 构建入站与出站连接，仅为产生实际连接的服务生成 service 节点
+	// 2. 构建入站、内部调用与出站连接
 	clientNodes := make(map[string]*GraphNode)
+	localClientNodes := make(map[string]*GraphNode)
 	activeServiceNodes := make(map[string]*GraphNode)
 	outboundNodes := make(map[string]*GraphNode)
 	edgeMap := make(map[string]*GraphEdge)
@@ -977,9 +1102,13 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 
 			// 仅当产生连接时，才激活并创建监听服务节点 [process:port]
 			if _, exists := activeServiceNodes[srvNodeID]; !exists {
-				procName, isContainer := resolveProcName(listenConn.Process, c.LocalPort, protoBase, dockerPortMap)
-				if procName == protoBase && c.Process != "" {
-					procName, isContainer = resolveProcName(c.Process, c.LocalPort, protoBase, dockerPortMap)
+				procName, isContainer := resolveServiceProcName(listenConn.Process, c.LocalIP, c.LocalPort, protoBase, dockerPortMap, containerIPMap)
+				if (procName == protoBase || isContainerProxyProcess(procName)) && c.Process != "" {
+					procName2, isContainer2 := resolveServiceProcName(c.Process, c.LocalIP, c.LocalPort, protoBase, dockerPortMap, containerIPMap)
+					if isContainer2 || procName2 != protoBase {
+						procName = procName2
+						isContainer = isContainer2
+					}
 				}
 				activeServiceNodes[srvNodeID] = &GraphNode{
 					ID:          srvNodeID,
@@ -988,22 +1117,38 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 					Port:        c.LocalPort,
 					Process:     procName,
 					Proto:       c.Proto,
-					Level:       2,
+					Level:       3,
 					IsContainer: isContainer,
 				}
 			}
 
 			// 判断是否为本机/Docker 内部连接
 			if isLocalOrContainerIP(c.RemoteIP, hostIP, knownLocalIPs) {
-				// 本机/Docker 内部调用：不生成 client 节点，直接 [server] -> [service]
-				edgeID := fmt.Sprintf("edge_internal_%s_%s_%s", serverNodeID, srvNodeID, protoBase)
+				// 本机/Docker 内部调用：客户端进程节点 [local_client] -> [service]
+				clientProcName, isContainer := resolveClientProcName(c.Process, c.RemoteIP, c.RemotePort, c.LocalIP, c.LocalPort, protoBase, dockerPortMap, containerIPMap)
+				if clientProcName == "local-client" && c.Process != "" && !isContainerProxyProcess(c.Process) {
+					clientProcName = c.Process
+				}
+				clientProcID := fmt.Sprintf("clientproc_%s", sanitizeNodeID(clientProcName))
+				if _, exists := localClientNodes[clientProcID]; !exists {
+					localClientNodes[clientProcID] = &GraphNode{
+						ID:          clientProcID,
+						Label:       clientProcName,
+						NodeType:    "local_client",
+						Process:     clientProcName,
+						Level:       2,
+						IsContainer: isContainer,
+					}
+				}
+
+				edgeID := fmt.Sprintf("edge_internal_%s_%s_%s", clientProcID, srvNodeID, protoBase)
 				if edge, exists := edgeMap[edgeID]; exists {
 					edge.ConnCount++
 					edge.Details = append(edge.Details, c)
 				} else {
 					edgeMap[edgeID] = &GraphEdge{
 						ID:        edgeID,
-						Source:    serverNodeID,
+						Source:    clientProcID,
 						Target:    srvNodeID,
 						EdgeType:  "internal",
 						Proto:     c.Proto,
@@ -1043,15 +1188,29 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 				}
 			}
 		} else {
+			// 发起方连接：客户端进程作为 Source
+			clientProcName, isContainer := resolveClientProcName(c.Process, c.LocalIP, c.LocalPort, c.RemoteIP, c.RemotePort, protoBase, dockerPortMap, containerIPMap)
+			clientProcID := fmt.Sprintf("clientproc_%s", sanitizeNodeID(clientProcName))
+			if _, exists := localClientNodes[clientProcID]; !exists {
+				localClientNodes[clientProcID] = &GraphNode{
+					ID:          clientProcID,
+					Label:       clientProcName,
+					NodeType:    "local_client",
+					Process:     clientProcName,
+					Level:       2,
+					IsContainer: isContainer,
+				}
+			}
+
 			// B. 判断出站 remoteIP 是否为本机或 Docker IP
 			if isLocalOrContainerIP(c.RemoteIP, hostIP, knownLocalIPs) {
-				// 本机进程主动连接本机或 Docker 内部服务：归入内部调用 [server] -> [service]
+				// 本机进程主动连接本机或 Docker 内部服务：归入内部调用 [clientproc] -> [service]
 				srvNodeID := fmt.Sprintf("srv_%s_%d", protoBase, c.RemotePort)
 				if _, exists := activeServiceNodes[srvNodeID]; !exists {
-					procName, isContainer := resolveProcName("", c.RemotePort, protoBase, dockerPortMap)
+					procName, isContainerSrv := resolveServiceProcName("", c.RemoteIP, c.RemotePort, protoBase, dockerPortMap, containerIPMap)
 					targetKey := fmt.Sprintf("%s_%d", protoBase, c.RemotePort)
 					if listenConn, ok := listeningMap[targetKey]; ok {
-						procName, isContainer = resolveProcName(listenConn.Process, c.RemotePort, protoBase, dockerPortMap)
+						procName, isContainerSrv = resolveServiceProcName(listenConn.Process, c.RemoteIP, c.RemotePort, protoBase, dockerPortMap, containerIPMap)
 					}
 					activeServiceNodes[srvNodeID] = &GraphNode{
 						ID:          srvNodeID,
@@ -1060,19 +1219,19 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 						Port:        c.RemotePort,
 						Process:     procName,
 						Proto:       c.Proto,
-						Level:       2,
-						IsContainer: isContainer,
+						Level:       3,
+						IsContainer: isContainerSrv,
 					}
 				}
 
-				edgeID := fmt.Sprintf("edge_internal_%s_%s_%s", serverNodeID, srvNodeID, protoBase)
+				edgeID := fmt.Sprintf("edge_internal_%s_%s_%s", clientProcID, srvNodeID, protoBase)
 				if edge, exists := edgeMap[edgeID]; exists {
 					edge.ConnCount++
 					edge.Details = append(edge.Details, c)
 				} else {
 					edgeMap[edgeID] = &GraphEdge{
 						ID:        edgeID,
-						Source:    serverNodeID,
+						Source:    clientProcID,
 						Target:    srvNodeID,
 						EdgeType:  "internal",
 						Proto:     c.Proto,
@@ -1081,7 +1240,7 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 					}
 				}
 			} else {
-				// 真正的外部出站外联链路：[server] -> [tcp://remoteip:port]
+				// 真正的外部出站外联链路：[clientproc] -> [tcp://remoteip:port]
 				remoteTarget := fmt.Sprintf("%s://%s:%d", protoBase, c.RemoteIP, c.RemotePort)
 				outboundID := fmt.Sprintf("outbound_%s_%s_%d", protoBase, sanitizeNodeID(c.RemoteIP), c.RemotePort)
 
@@ -1096,14 +1255,14 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 					}
 				}
 
-				edgeID := fmt.Sprintf("edge_%s_%s_%s", serverNodeID, outboundID, protoBase)
+				edgeID := fmt.Sprintf("edge_%s_%s_%s", clientProcID, outboundID, protoBase)
 				if edge, exists := edgeMap[edgeID]; exists {
 					edge.ConnCount++
 					edge.Details = append(edge.Details, c)
 				} else {
 					edgeMap[edgeID] = &GraphEdge{
 						ID:        edgeID,
-						Source:    serverNodeID,
+						Source:    clientProcID,
 						Target:    outboundID,
 						EdgeType:  "outbound",
 						Proto:     c.Proto,
@@ -1115,9 +1274,18 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 		}
 	}
 
-	// 3. 将激活的服务进程节点加入节点列表 (listen 不再产生边)
-	for _, srvNode := range activeServiceNodes {
-		topo.Nodes = append(topo.Nodes, *srvNode)
+	// 3. 将激活的服务进程节点与客户端进程节点加入节点列表
+	for _, node := range clientNodes {
+		topo.Nodes = append(topo.Nodes, *node)
+	}
+	for _, node := range localClientNodes {
+		topo.Nodes = append(topo.Nodes, *node)
+	}
+	for _, node := range activeServiceNodes {
+		topo.Nodes = append(topo.Nodes, *node)
+	}
+	for _, node := range outboundNodes {
+		topo.Nodes = append(topo.Nodes, *node)
 	}
 
 	// 格式化边的显示文本（标注连接数与状态）
@@ -1138,10 +1306,8 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 				edge.Label = fmt.Sprintf("%s %s", protoBase, stateStr)
 			}
 		} else if edge.EdgeType == "internal" {
-			procStr := ""
 			stateStr := "ESTAB"
 			if len(edge.Details) > 0 {
-				procStr = edge.Details[0].Process
 				s := edge.Details[0].State
 				if s == "ESTABLISHED" {
 					s = "ESTAB"
@@ -1149,53 +1315,40 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 				stateStr = s
 			}
 			protoBase := getBaseProto(edge.Proto)
-			if procStr != "" {
-				if edge.ConnCount > 1 {
-					edge.Label = fmt.Sprintf("[%s] %d local (%s)", procStr, edge.ConnCount, stateStr)
-				} else {
-					edge.Label = fmt.Sprintf("[%s] local (%s)", procStr, stateStr)
-				}
+			if edge.ConnCount > 1 {
+				edge.Label = fmt.Sprintf("%d local (%s %s)", edge.ConnCount, protoBase, stateStr)
 			} else {
-				if edge.ConnCount > 1 {
-					edge.Label = fmt.Sprintf("local (%d %s %s)", edge.ConnCount, protoBase, stateStr)
-				} else {
-					edge.Label = fmt.Sprintf("local (%s %s)", protoBase, stateStr)
-				}
+				edge.Label = fmt.Sprintf("local (%s %s)", protoBase, stateStr)
 			}
 		} else if edge.EdgeType == "outbound" {
-			procStr := ""
 			stateStr := "ESTAB"
 			if len(edge.Details) > 0 {
-				procStr = edge.Details[0].Process
 				s := edge.Details[0].State
 				if s == "ESTABLISHED" {
 					s = "ESTAB"
 				}
 				stateStr = s
 			}
-			if procStr == "" {
-				procStr = getBaseProto(edge.Proto)
-			}
+			protoBase := getBaseProto(edge.Proto)
 			if edge.ConnCount > 1 {
-				edge.Label = fmt.Sprintf("[%s] %d conns (%s)", procStr, edge.ConnCount, stateStr)
+				edge.Label = fmt.Sprintf("%d conns (%s %s)", edge.ConnCount, protoBase, stateStr)
 			} else {
-				edge.Label = fmt.Sprintf("[%s] %s", procStr, stateStr)
+				edge.Label = fmt.Sprintf("%s %s", protoBase, stateStr)
 			}
 		}
-	}
-
-	for _, node := range clientNodes {
-		topo.Nodes = append(topo.Nodes, *node)
-	}
-	for _, node := range outboundNodes {
-		topo.Nodes = append(topo.Nodes, *node)
-	}
-	for _, edge := range edgeMap {
 		topo.Edges = append(topo.Edges, *edge)
 	}
 
+	sort.Slice(topo.Nodes, func(i, j int) bool {
+		return topo.Nodes[i].ID < topo.Nodes[j].ID
+	})
+	sort.Slice(topo.Edges, func(i, j int) bool {
+		return topo.Edges[i].ID < topo.Edges[j].ID
+	})
+
 	topo.Summary.ListeningCount = len(listeningMap)
 	topo.Summary.InboundClients = len(clientNodes)
+	topo.Summary.LocalClients = len(localClientNodes)
 	topo.Summary.OutboundCount = len(outboundNodes)
 
 	return topo
@@ -1213,8 +1366,7 @@ func getBaseProto(p string) string {
 }
 
 func sanitizeNodeID(s string) string {
-	reg := regexp.MustCompile(`[^a-zA-Z0-9_]`)
-	return reg.ReplaceAllString(s, "_")
+	return reSanitizeID.ReplaceAllString(s, "_")
 }
 
 func openBrowser(targetURL string) error {

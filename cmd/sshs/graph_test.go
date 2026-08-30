@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/urfave/cli/v2"
 )
 
 func TestGraphDefaultsToTenSecondRefresh(t *testing.T) {
@@ -103,7 +105,8 @@ hostname=app-server-01
 	mysql-db	0.0.0.0:3306->3306/tcp
 
 	===CONTAINER_IPS===
-	172.17.0.2
+	client-worker|1001|172.17.0.3|
+	mysql-db|1002|172.17.0.2|3306
 
 ===NET===
 TYPE=SS
@@ -116,20 +119,24 @@ tcp ESTAB  0 0 192.168.1.10:80 192.168.1.51:50003 users:(("nginx",pid=101,fd=6))
 tcp ESTAB  0 0 127.0.0.1:3306 127.0.0.1:45678 users:(("rootlessport",pid=105,fd=4))
 tcp ESTAB  0 0 192.168.1.10:45678 172.17.0.2:6379 users:(("my-app",pid=300,fd=8))
 tcp ESTAB  0 0 192.168.1.10:34567 10.0.0.2:6379 users:(("my-app",pid=300,fd=7))
+tcp ESTAB  0 0 172.17.0.3:55555 10.0.0.9:8080 users:(("docker-proxy",pid=999,fd=3))
 udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 `
-	conns, meta, knownLocalIPs, dockerPortMap := parseGraphCollectOutput(rawOutput)
+	conns, meta, knownLocalIPs, dockerPortMap, containerIPMap := parseGraphCollectOutput(rawOutput)
 	if meta["hostname"] != "app-server-01" {
 		t.Errorf("meta hostname = %q, want app-server-01", meta["hostname"])
 	}
 	if dockerPortMap[3306] != "mysql-db" || dockerPortMap[6379] != "redis-cluster" {
 		t.Errorf("unexpected dockerPortMap: %+v", dockerPortMap)
 	}
+	if containerIPMap["172.17.0.3"] != "client-worker" {
+		t.Errorf("containerIPMap[172.17.0.3] = %q, want client-worker", containerIPMap["172.17.0.3"])
+	}
 
-	topo := buildTopology(meta["hostname"], "192.168.1.10", conns, knownLocalIPs, dockerPortMap)
+	topo := buildTopology(meta["hostname"], "192.168.1.10", conns, knownLocalIPs, dockerPortMap, containerIPMap)
 
-	if topo.Summary.TotalConns != 10 {
-		t.Errorf("total conns = %d, want 10", topo.Summary.TotalConns)
+	if topo.Summary.TotalConns != 11 {
+		t.Errorf("total conns = %d, want 11", topo.Summary.TotalConns)
 	}
 	if topo.Summary.ListeningCount != 4 { // nginx:80, mysql-db:3306, sshd:22, named:53
 		t.Errorf("listening count = %d, want 4", topo.Summary.ListeningCount)
@@ -137,8 +144,11 @@ udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 	if topo.Summary.InboundClients != 2 { // 2 distinct external remote IPs: 192.168.1.50, 192.168.1.51
 		t.Errorf("inbound clients = %d, want 2", topo.Summary.InboundClients)
 	}
-	if topo.Summary.OutboundCount != 1 { // 只有 10.0.0.2:6379 是真正外部出站，172.17.0.2:6379 归属内部服务
-		t.Errorf("outbound count = %d, want 1", topo.Summary.OutboundCount)
+	if topo.Summary.LocalClients < 2 {
+		t.Errorf("local clients = %d, want >= 2", topo.Summary.LocalClients)
+	}
+	if topo.Summary.OutboundCount != 2 { // 10.0.0.2:6379 和 10.0.0.9:8080
+		t.Errorf("outbound count = %d, want 2", topo.Summary.OutboundCount)
 	}
 
 	// 验证 127.0.0.1 和 172.17.0.2 不会生成外部 client/outbound 节点
@@ -148,8 +158,8 @@ udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 		}
 	}
 
-	// 验证有活跃连接的服务节点 [nginx:80], [mysqld:3306], [6379] 存在，而无连接的 [sshd:22] 和 [named:53] 不会生成节点
-	var nginxFound, mysqlFound, dockerRedisFound, sshdFound, namedFound bool
+	// 验证有活跃连接的服务节点 [nginx:80], [mysqld:3306], [6379] 与客户端进程节点 [my-app], [client-worker] 存在
+	var nginxFound, mysqlFound, dockerRedisFound, sshdFound, namedFound, myAppClientFound, containerClientFound bool
 	for _, node := range topo.Nodes {
 		if node.ID == "srv_tcp_80" {
 			nginxFound = true
@@ -175,6 +185,21 @@ udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 		if node.ID == "srv_udp_53" {
 			namedFound = true
 		}
+		if node.ID == "clientproc_my_app" {
+			myAppClientFound = true
+			if node.NodeType != "local_client" {
+				t.Errorf("expected nodeType = local_client, got %q", node.NodeType)
+			}
+		}
+		if node.ID == "clientproc_client_worker" {
+			containerClientFound = true
+			if node.NodeType != "local_client" {
+				t.Errorf("expected nodeType = local_client, got %q", node.NodeType)
+			}
+			if !node.IsContainer {
+				t.Errorf("expected container client IsContainer = true")
+			}
+		}
 	}
 	if !nginxFound {
 		t.Errorf("expected active service node srv_tcp_80 not found")
@@ -185,6 +210,12 @@ udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 	if !dockerRedisFound {
 		t.Errorf("expected docker internal service node srv_tcp_6379 not found")
 	}
+	if !myAppClientFound {
+		t.Errorf("expected client process node clientproc_my_app not found")
+	}
+	if !containerClientFound {
+		t.Errorf("expected container client process node clientproc_client_worker not found")
+	}
 	if sshdFound {
 		t.Errorf("expected inactive service node srv_tcp_22 to be omitted")
 	}
@@ -192,15 +223,26 @@ udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 		t.Errorf("expected inactive service node srv_udp_53 to be omitted")
 	}
 
-	// 验证内部连接：直接从 [server] -> [srv_tcp_3306] 建立 internal 边
-	var internalMysqlEdgeFound bool
+	// 验证内部连接：从客户端进程 [my-app] -> [srv_tcp_6379] 建立 internal 边
+	var internalRedisEdgeFound bool
 	for _, edge := range topo.Edges {
-		if edge.Source == "node_server" && edge.Target == "srv_tcp_3306" && edge.EdgeType == "internal" {
-			internalMysqlEdgeFound = true
+		if edge.Source == "clientproc_my_app" && edge.Target == "srv_tcp_6379" && edge.EdgeType == "internal" {
+			internalRedisEdgeFound = true
 		}
 	}
-	if !internalMysqlEdgeFound {
-		t.Errorf("expected direct internal edge [server] -> [mysqld:3306] not found")
+	if !internalRedisEdgeFound {
+		t.Errorf("expected direct internal edge [my-app] -> [srv_tcp_6379] not found")
+	}
+
+	// 验证出站连接：从客户端进程 [my-app] -> [outbound] 建立 outbound 边
+	var outboundRedisEdgeFound bool
+	for _, edge := range topo.Edges {
+		if edge.Source == "clientproc_my_app" && edge.Target == "outbound_tcp_10_0_0_2_6379" && edge.EdgeType == "outbound" {
+			outboundRedisEdgeFound = true
+		}
+	}
+	if !outboundRedisEdgeFound {
+		t.Errorf("expected outbound edge [my-app] -> [outbound_tcp_10_0_0_2_6379] not found")
 	}
 
 	// 验证链路：[192.168.1.50] -> [nginx:80] 只有 1 条边，连接数显示 2 conns
@@ -228,8 +270,8 @@ udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 	if !strings.Contains(html, "app-server-01") || !strings.Contains(html, "antv/g6") || !strings.Contains(html, "/api/topology") {
 		t.Errorf("rendered HTML missing expected keywords or api endpoint")
 	}
-	if !strings.Contains(html, "escapeHTML") || !strings.Contains(html, "/api/interval") {
-		t.Errorf("rendered HTML missing safe detail rendering or interval update endpoint")
+	if !strings.Contains(html, "escapeHTML") || !strings.Contains(html, "/api/interval") || !strings.Contains(html, "combo_local_clients") || !strings.Contains(html, "toggleLayout") || !strings.Contains(html, "nodeClusterBy") {
+		t.Errorf("rendered HTML missing safe detail rendering, interval update endpoint, combo_local_clients, or toggleLayout/nodeClusterBy")
 	}
 	for _, escapedExpression := range []string{
 		"escapeHTML(model.process)",
@@ -255,7 +297,7 @@ func TestBuildTopologyDoesNotGuessPrivateNetworksAreLocal(t *testing.T) {
 		},
 	}
 
-	topology := buildTopology("app", "10.0.0.10", connections, []string{"10.0.0.10"}, nil)
+	topology := buildTopology("app", "10.0.0.10", connections, []string{"10.0.0.10"}, nil, nil)
 	if topology.Summary.OutboundCount != 1 {
 		t.Fatalf("outbound count = %d, want 1 for an uncollected private address", topology.Summary.OutboundCount)
 	}
@@ -306,5 +348,29 @@ func TestGraphIntervalHandlerRejectsInvalidRequests(t *testing.T) {
 				t.Fatalf("status = %d, want %d; body = %q", response.Code, testCase.status, response.Body.String())
 			}
 		})
+	}
+}
+
+func TestGraphCommandAliases(t *testing.T) {
+	app := newApp()
+	var graphCmd *cli.Command
+	for _, cmd := range app.Commands {
+		if cmd.Name == "graph" {
+			graphCmd = cmd
+			break
+		}
+	}
+	if graphCmd == nil {
+		t.Fatalf("graph command not found in app commands")
+	}
+
+	expectedAliases := map[string]bool{"g": true, "topo": true}
+	if len(graphCmd.Aliases) != len(expectedAliases) {
+		t.Fatalf("graph command aliases len = %d, want %d: %v", len(graphCmd.Aliases), len(expectedAliases), graphCmd.Aliases)
+	}
+	for _, alias := range graphCmd.Aliases {
+		if !expectedAliases[alias] {
+			t.Errorf("unexpected alias for graph command: %q", alias)
+		}
 	}
 }

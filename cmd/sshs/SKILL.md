@@ -82,6 +82,7 @@ sshs inspect --timeout 5s --concurrency 20 prod
 sshs graph prod-1                         # 启动本地 Web 服务并自动打开浏览器（别名: sshs g 或 sshs topo）
 sshs graph -i 20s prod-1                  # 可选：指定自动刷新间隔为 20s（也可在网页界面直接切换）
 sshs graph -l 127.0.0.1:8080 prod-1       # 可选：指定本地服务监听端口（默认随机分配）
+sshs graph --json prod-1                  # 可选：只采集一次并输出拓扑 JSON（不启动 Web 服务），供脚本/管道使用
 ```
 
 **登录：**

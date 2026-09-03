@@ -8,7 +8,7 @@ import (
 )
 
 // version 默认值供本地直接编译使用；发版时由 GoReleaser 通过 -ldflags 注入 tag 版本号
-var version = "1.20.1"
+var version = "1.24.0"
 
 func main() {
 	log.SetFlags(0)
@@ -68,7 +68,7 @@ func newApp() *cli.App {
 				Name:      "graph",
 				Aliases:   []string{"g", "topo"},
 				Usage:     "visualize host tcp/udp network topology via local web server",
-				UsageText: "sshs graph [-i <dur>] [-l <addr>] [host keywords...]",
+				UsageText: "sshs graph [-i <dur>] [-l <addr>] [host keywords...] [--json]",
 				Flags: []cli.Flag{
 					&cli.DurationFlag{
 						Name:    "interval",
@@ -81,6 +81,11 @@ func newApp() *cli.App {
 						Aliases: []string{"l"},
 						Usage:   "local web server listen address",
 						Value:   "127.0.0.1:0",
+					},
+					&cli.BoolFlag{
+						Name:  "json",
+						Usage: "output collected topology as json and exit (no web server)",
+						Value: false,
 					},
 				},
 				Action: GraphAction,

@@ -34,7 +34,8 @@ const (
 	graphIntervalMinimum = 2 * time.Second
 )
 
-// graphCollectScript 在远程主机上执行，采集网络连接、本机IP与容器（Docker/Podman/nerdctl等）映射信息
+// graphCollectScript 在远程主机上执行，采集网络连接、本机IP、容器（Docker/Podman/nerdctl等）映射信息，
+// 以及各容器独立网络命名空间内的连接表（宿主 ss/netstat 看不到经 DNAT 进容器的连接）
 const graphCollectScript = `
 echo "===META==="
 echo "hostname=$(hostname 2>/dev/null)"
@@ -55,6 +56,8 @@ if command -v nerdctl >/dev/null 2>&1; then
 fi
 
 echo "===CONTAINER_IPS==="
+host_ns=$(readlink /proc/self/ns/net 2>/dev/null)
+cnet_tuples=""
 if command -v docker >/dev/null 2>&1; then
   for cid in $(docker ps -q 2>/dev/null); do
     name=$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##')
@@ -62,6 +65,10 @@ if command -v docker >/dev/null 2>&1; then
     ips=$(docker inspect --format '{{.NetworkSettings.IPAddress}} {{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$cid" 2>/dev/null)
     ports=$(docker inspect --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' "$cid" 2>/dev/null)
     echo "$name|$pid|$ips|$ports"
+    ns=$(readlink "/proc/$pid/ns/net" 2>/dev/null)
+    if [ -n "$pid" ] && [ "$pid" != "0" ] && [ -n "$ns" ] && [ "$ns" != "$host_ns" ]; then
+      cnet_tuples="$cnet_tuples $name|$pid|$ns"
+    fi
   done
 fi
 if command -v podman >/dev/null 2>&1; then
@@ -71,6 +78,10 @@ if command -v podman >/dev/null 2>&1; then
     ips=$(podman inspect --format '{{.NetworkSettings.IPAddress}} {{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$cid" 2>/dev/null)
     ports=$(podman inspect --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' "$cid" 2>/dev/null)
     echo "$name|$pid|$ips|$ports"
+    ns=$(readlink "/proc/$pid/ns/net" 2>/dev/null)
+    if [ -n "$pid" ] && [ "$pid" != "0" ] && [ -n "$ns" ] && [ "$ns" != "$host_ns" ]; then
+      cnet_tuples="$cnet_tuples $name|$pid|$ns"
+    fi
   done
 fi
 if command -v nerdctl >/dev/null 2>&1; then
@@ -80,6 +91,10 @@ if command -v nerdctl >/dev/null 2>&1; then
     ips=$(nerdctl inspect --format '{{.NetworkSettings.IPAddress}} {{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$cid" 2>/dev/null)
     ports=$(nerdctl inspect --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' "$cid" 2>/dev/null)
     echo "$name|$pid|$ips|$ports"
+    ns=$(readlink "/proc/$pid/ns/net" 2>/dev/null)
+    if [ -n "$pid" ] && [ "$pid" != "0" ] && [ -n "$ns" ] && [ "$ns" != "$host_ns" ]; then
+      cnet_tuples="$cnet_tuples $name|$pid|$ns"
+    fi
   done
 fi
 
@@ -97,6 +112,46 @@ else
   [ -r /proc/net/udp ] && awk 'NR>1 {print "udp|" $2 "|" $3 "|" $4 "|" $10}' /proc/net/udp 2>/dev/null
   [ -r /proc/net/udp6 ] && awk 'NR>1 {print "udp6|" $2 "|" $3 "|" $4 "|" $10}' /proc/net/udp6 2>/dev/null
 fi
+
+echo "===CONTAINER_NET==="
+seen_ns=""
+for tuple in $cnet_tuples; do
+  name=${tuple%%|*}
+  rest=${tuple#*|}
+  pid=${rest%%|*}
+  ns=${rest#*|}
+  case " $seen_ns " in *" $ns "*) continue ;; esac
+  seen_ns="$seen_ns $ns"
+  names="$name"
+  for t2 in $cnet_tuples; do
+    n2=${t2%%|*}
+    r2=${t2#*|}
+    ns2=${r2#*|}
+    if [ "$ns2" = "$ns" ] && [ "$n2" != "$name" ]; then names="$names,$n2"; fi
+  done
+  echo "[[container]] names=$names netns=$ns"
+  if command -v nsenter >/dev/null 2>&1 && nsenter -t "$pid" -n true 2>/dev/null; then
+    if command -v ss >/dev/null 2>&1; then
+      echo "TYPE=SS"
+      { nsenter -t "$pid" -n ss -Hntuap 2>/dev/null || nsenter -t "$pid" -n ss -Hntua 2>/dev/null; } | head -2000
+    elif command -v netstat >/dev/null 2>&1; then
+      echo "TYPE=NETSTAT"
+      { nsenter -t "$pid" -n netstat -ntuap 2>/dev/null || nsenter -t "$pid" -n netstat -ntua 2>/dev/null; } | head -2000
+    else
+      echo "TYPE=PROC"
+      [ -r "/proc/$pid/net/tcp" ] && awk 'NR>1 {print "tcp|" $2 "|" $3 "|" $4 "|" $10}' "/proc/$pid/net/tcp" 2>/dev/null
+      [ -r "/proc/$pid/net/tcp6" ] && awk 'NR>1 {print "tcp6|" $2 "|" $3 "|" $4 "|" $10}' "/proc/$pid/net/tcp6" 2>/dev/null
+      [ -r "/proc/$pid/net/udp" ] && awk 'NR>1 {print "udp|" $2 "|" $3 "|" $4 "|" $10}' "/proc/$pid/net/udp" 2>/dev/null
+      [ -r "/proc/$pid/net/udp6" ] && awk 'NR>1 {print "udp6|" $2 "|" $3 "|" $4 "|" $10}' "/proc/$pid/net/udp6" 2>/dev/null
+    fi
+  else
+    echo "TYPE=PROC"
+    [ -r "/proc/$pid/net/tcp" ] && awk 'NR>1 {print "tcp|" $2 "|" $3 "|" $4 "|" $10}' "/proc/$pid/net/tcp" 2>/dev/null
+    [ -r "/proc/$pid/net/tcp6" ] && awk 'NR>1 {print "tcp6|" $2 "|" $3 "|" $4 "|" $10}' "/proc/$pid/net/tcp6" 2>/dev/null
+    [ -r "/proc/$pid/net/udp" ] && awk 'NR>1 {print "udp|" $2 "|" $3 "|" $4 "|" $10}' "/proc/$pid/net/udp" 2>/dev/null
+    [ -r "/proc/$pid/net/udp6" ] && awk 'NR>1 {print "udp6|" $2 "|" $3 "|" $4 "|" $10}' "/proc/$pid/net/udp6" 2>/dev/null
+  fi
+done
 exit 0
 `
 
@@ -110,6 +165,8 @@ type RawConn struct {
 	RemotePort int    `json:"remote_port"`
 	Process    string `json:"process,omitempty"`
 	PID        int    `json:"pid,omitempty"`
+	// Container 记录连接采自哪个（些）容器的网络命名空间；宿主视角采集时为空。
+	Container  string `json:"container,omitempty"`
 	LocalRaw   string `json:"local_raw"`
 	RemoteRaw  string `json:"remote_raw"`
 }
@@ -428,7 +485,15 @@ func GraphAction(c *cli.Context) error {
 		return cli.Exit(err, 1)
 	}
 
-	hostCfg, err := UISelect(keywords...)
+	jsonOutput := c.Bool("json")
+
+	// --json 面向脚本/管道，禁止交互式选择，关键词必须能唯一定位主机
+	var hostCfg Config
+	if jsonOutput {
+		hostCfg, err = SelectHostNonInteractive(keywords...)
+	} else {
+		hostCfg, err = UISelect(keywords...)
+	}
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
@@ -443,10 +508,17 @@ func GraphAction(c *cli.Context) error {
 
 	server := newGraphServer(hostCfg, graphTimeoutDefault, interval)
 
-	fmt.Printf("Connecting to %s (%s) to collect network topology...\n", hostCfg.Name, hostCfg.RemoteAddr())
-	_, err = server.fetchOnce(c.Context)
+	if !jsonOutput {
+		fmt.Printf("Connecting to %s (%s) to collect network topology...\n", hostCfg.Name, hostCfg.RemoteAddr())
+	}
+	topo, err := server.fetchOnce(c.Context)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to collect initial graph data: %v", err), 1)
+	}
+
+	if jsonOutput {
+		server.closeClient()
+		return printGraphJSON(topo)
 	}
 
 	listenAddr := c.String("addr")
@@ -511,6 +583,16 @@ func GraphAction(c *cli.Context) error {
 	return nil
 }
 
+// printGraphJSON 将拓扑数据以缩进 JSON 输出到 stdout，供脚本/管道消费。
+func printGraphJSON(topo *TopologyData) error {
+	b, err := json.MarshalIndent(topo, "", "  ")
+	if err != nil {
+		return cli.Exit(err, 1)
+	}
+	fmt.Fprintln(os.Stdout, string(b))
+	return nil
+}
+
 func collectAndBuildTopology(parent context.Context, client *ssh.Client, hostCfg Config, timeout time.Duration) (*TopologyData, error) {
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
@@ -560,6 +642,8 @@ func parseGraphCollectOutput(out string) ([]RawConn, map[string]string, []string
 	lines := strings.Split(out, "\n")
 	mode := ""
 	netType := ""
+	currentContainer := ""
+	containerNetType := ""
 
 	for _, rawLine := range lines {
 		line := strings.TrimSpace(rawLine)
@@ -584,6 +668,10 @@ func parseGraphCollectOutput(out string) ([]RawConn, map[string]string, []string
 		}
 		if line == "===NET===" {
 			mode = "net"
+			continue
+		}
+		if line == "===CONTAINER_NET===" {
+			mode = "container_net"
 			continue
 		}
 
@@ -701,10 +789,77 @@ func parseGraphCollectOutput(out string) ([]RawConn, map[string]string, []string
 					conns = append(conns, c)
 				}
 			}
+			continue
+		}
+
+		if mode == "container_net" {
+			// [[container]] names=a,b netns=net:[...] 标记后续连接归属的容器
+			if strings.HasPrefix(line, "[[container]]") {
+				currentContainer = containerNetNames(line)
+				containerNetType = ""
+				continue
+			}
+			if strings.HasPrefix(line, "TYPE=") {
+				containerNetType = strings.TrimPrefix(line, "TYPE=")
+				continue
+			}
+
+			var c RawConn
+			var ok bool
+			switch containerNetType {
+			case "SS":
+				c, ok = parseSSLine(line)
+			case "NETSTAT":
+				c, ok = parseNetstatLine(line)
+			case "PROC":
+				c, ok = parseProcLine(line)
+			}
+			if ok {
+				c.Container = currentContainer
+				conns = append(conns, c)
+			}
 		}
 	}
 
-	return conns, meta, knownLocalIPs, dockerPortMap, containerIPMap
+	return dedupeMirrorConns(conns), meta, knownLocalIPs, dockerPortMap, containerIPMap
+}
+
+// containerNetNames 从 [[container]] 头行提取容器名（共享网络命名空间时可能为逗号分隔的多个）。
+func containerNetNames(line string) string {
+	for _, field := range strings.Fields(line) {
+		if name, ok := strings.CutPrefix(field, "names="); ok {
+			return name
+		}
+	}
+	return ""
+}
+
+// connTupleKey 用协议与两端原始地址拼出连接元组键。
+func connTupleKey(proto, localRaw, remoteRaw string) string {
+	return proto + "|" + localRaw + "|" + remoteRaw
+}
+
+// dedupeMirrorConns 去除同一连接在不同网络命名空间被重复采集的镜像对（宿主视角与容器视角互为镜像），
+// 保留先出现的一条：宿主视角在前，其进程归属更准确。LISTEN 无真实对端，不参与去重。
+func dedupeMirrorConns(conns []RawConn) []RawConn {
+	seen := make(map[string]struct{}, len(conns))
+	result := make([]RawConn, 0, len(conns))
+	for _, c := range conns {
+		if c.State == "LISTEN" {
+			result = append(result, c)
+			continue
+		}
+		key := connTupleKey(c.Proto, c.LocalRaw, c.RemoteRaw)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		if _, mirrored := seen[connTupleKey(c.Proto, c.RemoteRaw, c.LocalRaw)]; mirrored {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, c)
+	}
+	return result
 }
 
 func parseSSLine(line string) (RawConn, bool) {
@@ -917,6 +1072,12 @@ func splitHostPortSafe(addr string) (string, int) {
 	}
 	port, _ := strconv.Atoi(portStr)
 	host = strings.Trim(host, "[]")
+	// IPv4 映射地址（如 [::ffff:172.18.0.4]）归一化为点分十进制，保证容器 IP 映射表可命中
+	if ip := net.ParseIP(host); ip != nil {
+		if v4 := ip.To4(); v4 != nil {
+			host = v4.String()
+		}
+	}
 	return host, port
 }
 
@@ -969,7 +1130,12 @@ func isDockerBridgeSubnet(ipStr string) bool {
 	return false
 }
 
-func resolveServiceProcName(rawProc, localIP string, localPort int, protoBase string, dockerPortMap map[int]string, containerIPMap map[string]string) (string, bool) {
+func resolveServiceProcName(rawProc, localIP string, localPort int, protoBase string, container string, dockerPortMap map[int]string, containerIPMap map[string]string) (string, bool) {
+	// 0. 连接直接采自容器网络命名空间，归属最可靠
+	if container != "" {
+		return container, true
+	}
+
 	// 1. 本地端口命中暴露容器端口映射
 	if cName, ok := dockerPortMap[localPort]; ok && cName != "" {
 		return cName, true
@@ -1000,7 +1166,12 @@ func resolveServiceProcName(rawProc, localIP string, localPort int, protoBase st
 	return protoBase, false
 }
 
-func resolveClientProcName(rawProc, localIP string, localPort int, remoteIP string, remotePort int, protoBase string, dockerPortMap map[int]string, containerIPMap map[string]string) (string, bool) {
+func resolveClientProcName(rawProc, localIP string, localPort int, remoteIP string, remotePort int, protoBase string, container string, dockerPortMap map[int]string, containerIPMap map[string]string) (string, bool) {
+	// 0. 连接直接采自容器网络命名空间，客户端即该容器
+	if container != "" {
+		return container, true
+	}
+
 	// 1. 本地 IP 命中已知容器 IP，说明该客户端来自对应容器
 	if cName, ok := containerIPMap[localIP]; ok && cName != "" {
 		return cName, true
@@ -1053,19 +1224,26 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 	}
 
 	// 1. 提取所有本地监听服务配置
+	// 同一协议端口在宿主与容器视角各有一条 LISTEN 时，优先保留容器视角（归属更准确）。
 	listeningMap := make(map[string]RawConn)
+	listeningLabels := make(map[string]struct{})
 	for _, c := range conns {
 		if c.State == "LISTEN" || (strings.HasPrefix(c.Proto, "udp") && (c.RemotePort == 0 || c.RemoteIP == "*" || c.RemoteIP == "0.0.0.0")) {
 			protoBase := getBaseProto(c.Proto)
 			key := fmt.Sprintf("%s_%d", protoBase, c.LocalPort)
-			listeningMap[key] = c
+			if prev, ok := listeningMap[key]; !ok || (prev.Container == "" && c.Container != "") {
+				listeningMap[key] = c
+			}
 
-			procName, isContainer := resolveServiceProcName(c.Process, c.LocalIP, c.LocalPort, protoBase, dockerPortMap, containerIPMap)
+			procName, isContainer := resolveServiceProcName(c.Process, c.LocalIP, c.LocalPort, protoBase, c.Container, dockerPortMap, containerIPMap)
 			serviceLabel := fmt.Sprintf("%s:%d", procName, c.LocalPort)
 			if isContainer {
 				serviceLabel = "🐳 " + serviceLabel
 			}
-			topo.ListeningPorts = append(topo.ListeningPorts, serviceLabel)
+			if _, ok := listeningLabels[serviceLabel]; !ok {
+				listeningLabels[serviceLabel] = struct{}{}
+				topo.ListeningPorts = append(topo.ListeningPorts, serviceLabel)
+			}
 		}
 	}
 	sort.Strings(topo.ListeningPorts)
@@ -1102,9 +1280,14 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 
 			// 仅当产生连接时，才激活并创建监听服务节点 [process:port]
 			if _, exists := activeServiceNodes[srvNodeID]; !exists {
-				procName, isContainer := resolveServiceProcName(listenConn.Process, c.LocalIP, c.LocalPort, protoBase, dockerPortMap, containerIPMap)
+				// 连接自带容器归属（采自容器网络命名空间）时优先，其次用监听条目归属
+				attribution := c.Container
+				if attribution == "" {
+					attribution = listenConn.Container
+				}
+				procName, isContainer := resolveServiceProcName(listenConn.Process, c.LocalIP, c.LocalPort, protoBase, attribution, dockerPortMap, containerIPMap)
 				if (procName == protoBase || isContainerProxyProcess(procName)) && c.Process != "" {
-					procName2, isContainer2 := resolveServiceProcName(c.Process, c.LocalIP, c.LocalPort, protoBase, dockerPortMap, containerIPMap)
+					procName2, isContainer2 := resolveServiceProcName(c.Process, c.LocalIP, c.LocalPort, protoBase, attribution, dockerPortMap, containerIPMap)
 					if isContainer2 || procName2 != protoBase {
 						procName = procName2
 						isContainer = isContainer2
@@ -1125,7 +1308,8 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 			// 判断是否为本机/Docker 内部连接
 			if isLocalOrContainerIP(c.RemoteIP, hostIP, knownLocalIPs) {
 				// 本机/Docker 内部调用：客户端进程节点 [local_client] -> [service]
-				clientProcName, isContainer := resolveClientProcName(c.Process, c.RemoteIP, c.RemotePort, c.LocalIP, c.LocalPort, protoBase, dockerPortMap, containerIPMap)
+				// 注意此处客户端在连接的 remote 端，容器归属属于服务端容器，不能用于标注客户端，故传 ""
+				clientProcName, isContainer := resolveClientProcName(c.Process, c.RemoteIP, c.RemotePort, c.LocalIP, c.LocalPort, protoBase, "", dockerPortMap, containerIPMap)
 				if clientProcName == "local-client" && c.Process != "" && !isContainerProxyProcess(c.Process) {
 					clientProcName = c.Process
 				}
@@ -1188,8 +1372,8 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 				}
 			}
 		} else {
-			// 发起方连接：客户端进程作为 Source
-			clientProcName, isContainer := resolveClientProcName(c.Process, c.LocalIP, c.LocalPort, c.RemoteIP, c.RemotePort, protoBase, dockerPortMap, containerIPMap)
+			// 发起方连接：客户端进程作为 Source；容器网络命名空间内采集的连接，发起方即该容器
+			clientProcName, isContainer := resolveClientProcName(c.Process, c.LocalIP, c.LocalPort, c.RemoteIP, c.RemotePort, protoBase, c.Container, dockerPortMap, containerIPMap)
 			clientProcID := fmt.Sprintf("clientproc_%s", sanitizeNodeID(clientProcName))
 			if _, exists := localClientNodes[clientProcID]; !exists {
 				localClientNodes[clientProcID] = &GraphNode{
@@ -1207,10 +1391,10 @@ func buildTopology(hostName, hostIP string, conns []RawConn, knownLocalIPs []str
 				// 本机进程主动连接本机或 Docker 内部服务：归入内部调用 [clientproc] -> [service]
 				srvNodeID := fmt.Sprintf("srv_%s_%d", protoBase, c.RemotePort)
 				if _, exists := activeServiceNodes[srvNodeID]; !exists {
-					procName, isContainerSrv := resolveServiceProcName("", c.RemoteIP, c.RemotePort, protoBase, dockerPortMap, containerIPMap)
+					procName, isContainerSrv := resolveServiceProcName("", c.RemoteIP, c.RemotePort, protoBase, "", dockerPortMap, containerIPMap)
 					targetKey := fmt.Sprintf("%s_%d", protoBase, c.RemotePort)
 					if listenConn, ok := listeningMap[targetKey]; ok {
-						procName, isContainerSrv = resolveServiceProcName(listenConn.Process, c.RemoteIP, c.RemotePort, protoBase, dockerPortMap, containerIPMap)
+						procName, isContainerSrv = resolveServiceProcName(listenConn.Process, c.RemoteIP, c.RemotePort, protoBase, listenConn.Container, dockerPortMap, containerIPMap)
 					}
 					activeServiceNodes[srvNodeID] = &GraphNode{
 						ID:          srvNodeID,

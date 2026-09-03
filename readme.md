@@ -115,6 +115,10 @@ sshs graph -i 20s server1
 
 # 可选：指定本地服务监听端口（默认随机分配）
 sshs graph -l 127.0.0.1:8080 server1
+
+# 可选：只采集一次并以 JSON 输出拓扑数据（不启动 Web 服务），便于脚本/管道消费
+sshs graph --json server1
+sshs graph --json server1 | jq '.edges[] | select(.edgeType=="inbound")'
 ```
 
 ### ssh 登录

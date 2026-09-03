@@ -1,14 +1,32 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/urfave/cli/v2"
 )
+
+func TestGraphCollectScriptShellSyntax(t *testing.T) {
+	scriptPath := filepath.Join(t.TempDir(), "collect.sh")
+	if err := os.WriteFile(scriptPath, []byte(graphCollectScript), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+	if out, err := exec.Command("sh", "-n", scriptPath).CombinedOutput(); err != nil {
+		t.Fatalf("graphCollectScript has shell syntax errors: %v\n%s", err, out)
+	}
+}
 
 func TestGraphDefaultsToTenSecondRefresh(t *testing.T) {
 	if graphIntervalDefault != 10*time.Second {
@@ -285,6 +303,163 @@ udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 	}
 }
 
+func TestParseContainerNetSectionAttributesAndDedupesMirror(t *testing.T) {
+	rawOutput := `
+===META===
+hostname=docker-host
+
+===IPS===
+10.0.0.1 172.18.0.1
+
+===CONTAINER_IPS===
+mariadb|5001|172.18.0.7|3306
+
+===NET===
+TYPE=SS
+tcp LISTEN 0 128 0.0.0.0:3306 0.0.0.0:* users:(("docker-proxy",pid=900,fd=4))
+tcp ESTAB 0 0 172.18.0.1:57484 172.18.0.7:3306 users:(("my-app",pid=300,fd=8))
+
+===CONTAINER_NET===
+[[container]] names=mariadb netns=net:[4026532730]
+TYPE=SS
+tcp LISTEN 0 128 172.18.0.7:3306 0.0.0.0:* users:(("mariadbd",pid=1,fd=22))
+tcp ESTAB 0 0 172.18.0.7:3306 203.0.113.9:59060 users:(("mariadbd",pid=1,fd=30))
+tcp ESTAB 0 0 172.18.0.7:3306 172.18.0.1:57484 users:(("mariadbd",pid=1,fd=31))
+`
+	conns, meta, _, _, _ := parseGraphCollectOutput(rawOutput)
+	if meta["hostname"] != "docker-host" {
+		t.Errorf("meta hostname = %q, want docker-host", meta["hostname"])
+	}
+
+	// 宿主 2 行 + 容器 3 行，其中 172.18.0.1:57484<->172.18.0.7:3306 互为镜像去重一条（LISTEN 不参与去重）
+	if len(conns) != 4 {
+		t.Fatalf("conns = %d, want 4 after mirror dedup: %+v", len(conns), conns)
+	}
+
+	var containerConns []RawConn
+	for _, c := range conns {
+		if c.Container != "" {
+			containerConns = append(containerConns, c)
+		}
+	}
+	if len(containerConns) != 2 {
+		t.Fatalf("container-tagged conns = %d, want 2", len(containerConns))
+	}
+	for _, c := range containerConns {
+		if c.Container != "mariadb" {
+			t.Errorf("container attribution = %q, want mariadb", c.Container)
+		}
+	}
+
+	// 镜像去重保留宿主视角（进程归属 my-app 而非容器内服务端进程）
+	var hostViewFound bool
+	for _, c := range conns {
+		if c.LocalRaw == "172.18.0.1:57484" && c.Process == "my-app" {
+			hostViewFound = true
+		}
+	}
+	if !hostViewFound {
+		t.Errorf("mirror dedup should keep host-view conn with process my-app: %+v", conns)
+	}
+}
+
+func TestBuildTopologyExternalInboundIntoContainer(t *testing.T) {
+	conns := []RawConn{
+		// 宿主视角：docker-proxy 监听发布端口，但外部流量被内核 DNAT，宿主看不到外部客户端
+		{Proto: "tcp", State: "LISTEN", LocalIP: "0.0.0.0", LocalPort: 3306, RemoteIP: "*", Process: "docker-proxy", LocalRaw: "0.0.0.0:3306", RemoteRaw: "*:*"},
+		// 容器视角：容器内监听与经 DNAT 进来的外部客户端
+		{Proto: "tcp", State: "LISTEN", LocalIP: "172.18.0.7", LocalPort: 3306, RemoteIP: "*", Process: "mariadbd", Container: "mariadb", LocalRaw: "172.18.0.7:3306", RemoteRaw: "*:*"},
+		{Proto: "tcp", State: "ESTABLISHED", LocalIP: "172.18.0.7", LocalPort: 3306, RemoteIP: "203.0.113.9", RemotePort: 59060, Process: "mariadbd", Container: "mariadb", LocalRaw: "172.18.0.7:3306", RemoteRaw: "203.0.113.9:59060"},
+	}
+	knownLocalIPs := []string{"10.0.0.1", "172.18.0.1", "172.18.0.7"}
+	containerIPMap := map[string]string{"172.18.0.7": "mariadb"}
+	dockerPortMap := map[int]string{3306: "mariadb"}
+
+	topo := buildTopology("docker-host", "10.0.0.1", conns, knownLocalIPs, dockerPortMap, containerIPMap)
+
+	var srv *GraphNode
+	for i := range topo.Nodes {
+		if topo.Nodes[i].ID == "srv_tcp_3306" {
+			srv = &topo.Nodes[i]
+		}
+	}
+	if srv == nil {
+		t.Fatalf("service node srv_tcp_3306 not found; nodes=%+v", topo.Nodes)
+	}
+	if srv.Process != "mariadb" || !srv.IsContainer {
+		t.Errorf("service node = %+v, want process mariadb & container", *srv)
+	}
+
+	var inbound *GraphEdge
+	for i := range topo.Edges {
+		if topo.Edges[i].Source == "client_203_0_113_9" && topo.Edges[i].Target == "srv_tcp_3306" {
+			inbound = &topo.Edges[i]
+		}
+	}
+	if inbound == nil {
+		t.Fatalf("expected inbound edge client_203_0_113_9 -> srv_tcp_3306, edges=%+v", topo.Edges)
+	}
+	if inbound.EdgeType != "inbound" {
+		t.Errorf("edge type = %q, want inbound", inbound.EdgeType)
+	}
+	if topo.Summary.InboundClients != 1 {
+		t.Errorf("inbound clients = %d, want 1", topo.Summary.InboundClients)
+	}
+}
+
+func TestBuildTopologyContainerOutboundAttribution(t *testing.T) {
+	conns := []RawConn{
+		// 容器视角：容器主动外联（如 watchtower 拉取镜像）
+		{Proto: "tcp", State: "ESTABLISHED", LocalIP: "172.18.0.3", LocalPort: 40000, RemoteIP: "199.165.136.100", RemotePort: 443, Process: "watchtower", Container: "watchtower", LocalRaw: "172.18.0.3:40000", RemoteRaw: "199.165.136.100:443"},
+	}
+	knownLocalIPs := []string{"10.0.0.1", "172.18.0.1", "172.18.0.3"}
+
+	topo := buildTopology("docker-host", "10.0.0.1", conns, knownLocalIPs, nil, map[string]string{"172.18.0.3": "watchtower"})
+
+	var client *GraphNode
+	for i := range topo.Nodes {
+		if topo.Nodes[i].ID == "clientproc_watchtower" {
+			client = &topo.Nodes[i]
+		}
+	}
+	if client == nil {
+		t.Fatalf("expected container client node clientproc_watchtower, nodes=%+v", topo.Nodes)
+	}
+	if !client.IsContainer {
+		t.Errorf("container client node should have IsContainer=true")
+	}
+
+	var outboundFound bool
+	for _, edge := range topo.Edges {
+		if edge.Source == "clientproc_watchtower" && edge.Target == "outbound_tcp_199_165_136_100_443" && edge.EdgeType == "outbound" {
+			outboundFound = true
+		}
+	}
+	if !outboundFound {
+		t.Errorf("expected outbound edge watchtower -> 199.165.136.100:443, edges=%+v", topo.Edges)
+	}
+}
+
+func TestSplitHostPortSafeNormalizesIPv4Mapped(t *testing.T) {
+	testCases := []struct {
+		addr     string
+		wantIP   string
+		wantPort int
+	}{
+		{"[::ffff:172.18.0.4]:4160", "172.18.0.4", 4160},
+		{"[::1]:22", "::1", 22},
+		{"[::]:3306", "::", 3306},
+		{"172.18.0.4:4160", "172.18.0.4", 4160},
+		{"*:*", "*", 0},
+	}
+	for _, tc := range testCases {
+		ip, port := splitHostPortSafe(tc.addr)
+		if ip != tc.wantIP || port != tc.wantPort {
+			t.Errorf("splitHostPortSafe(%q) = (%q,%d), want (%q,%d)", tc.addr, ip, port, tc.wantIP, tc.wantPort)
+		}
+	}
+}
+
 func TestBuildTopologyDoesNotGuessPrivateNetworksAreLocal(t *testing.T) {
 	connections := []RawConn{
 		{
@@ -348,6 +523,67 @@ func TestGraphIntervalHandlerRejectsInvalidRequests(t *testing.T) {
 				t.Fatalf("status = %d, want %d; body = %q", response.Code, testCase.status, response.Body.String())
 			}
 		})
+	}
+}
+
+func TestGraphCommandHasJSONFlag(t *testing.T) {
+	app := newApp()
+	var graphCmd *cli.Command
+	for _, cmd := range app.Commands {
+		if cmd.Name == "graph" {
+			graphCmd = cmd
+			break
+		}
+	}
+	if graphCmd == nil {
+		t.Fatalf("graph command not found in app commands")
+	}
+
+	var jsonFlag *cli.BoolFlag
+	for _, flag := range graphCmd.Flags {
+		if bf, ok := flag.(*cli.BoolFlag); ok && bf.Name == "json" {
+			jsonFlag = bf
+			break
+		}
+	}
+	if jsonFlag == nil {
+		t.Fatalf("graph command missing --json bool flag")
+	}
+	if jsonFlag.Value != false {
+		t.Errorf("--json default = %v, want false", jsonFlag.Value)
+	}
+}
+
+func TestPrintGraphJSONEmitsValidJSON(t *testing.T) {
+	topo := &TopologyData{
+		HostName: "app-server-01",
+		HostIP:   "10.0.0.1",
+		Nodes:    []GraphNode{{ID: "srv_tcp_80", Label: "nginx:80", NodeType: "service"}},
+	}
+	topo.Summary.TotalConns = 5
+
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+
+	runErr := printGraphJSON(topo)
+
+	w.Close()
+	os.Stdout = origStdout
+	captured, _ := io.ReadAll(r)
+
+	if runErr != nil {
+		t.Fatalf("printGraphJSON returned error: %v", runErr)
+	}
+	var decoded TopologyData
+	if err := json.Unmarshal(captured, &decoded); err != nil {
+		t.Fatalf("printGraphJSON output is not valid JSON: %v\n%s", err, captured)
+	}
+	if decoded.HostName != "app-server-01" || decoded.Summary.TotalConns != 5 {
+		t.Errorf("decoded topology mismatch: %+v", decoded)
 	}
 }
 

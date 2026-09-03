@@ -53,6 +53,14 @@ vi ~/.sshs.yaml
   } # 使用跳板机
 ```
 
+> 配置里没写 `password` 的主机（含跳板机）会回退读取环境变量 `SSHS_PASSWORD` 作为密码：
+>
+> ```sh
+> export SSHS_PASSWORD=123456
+> ```
+>
+> 配置中写明的 `password` 优先；`SSHS_PASSWORD` 未设置时行为不变。
+
 ## Usage
 
 ### 查看主机列表

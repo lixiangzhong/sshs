@@ -61,6 +61,14 @@ func (c *Config) Username() string {
 	return c.User
 }
 
+// PasswordValue 返回生效的密码：配置中写明则用配置值，否则回退环境变量 SSHS_PASSWORD。
+func (c *Config) PasswordValue() string {
+	if c.Password != "" {
+		return c.Password
+	}
+	return os.Getenv("SSHS_PASSWORD")
+}
+
 func (c *Config) RemotePort() int {
 	if c.Port <= 0 {
 		return 22
@@ -82,8 +90,8 @@ func (c *Config) AuthMethod() []ssh.AuthMethod {
 			auth = append(auth, secureshell.KeyAuth(b, c.Passphrase))
 		}
 	}
-	if c.Password != "" {
-		auth = append(auth, secureshell.PasswordAuth(c.Password))
+	if password := c.PasswordValue(); password != "" {
+		auth = append(auth, secureshell.PasswordAuth(password))
 	}
 	return auth
 }

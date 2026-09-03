@@ -15,6 +15,27 @@ func Test_configFileList(t *testing.T) {
 	t.Log(list)
 }
 
+func Test_PasswordValueFallsBackToSSHSPasswordEnv(t *testing.T) {
+	t.Setenv("SSHS_PASSWORD", "")
+	c := &Config{Name: "web", Host: "10.0.0.1"}
+	if got := c.PasswordValue(); got != "" {
+		t.Fatalf("PasswordValue() = %q, want empty when env unset", got)
+	}
+
+	t.Setenv("SSHS_PASSWORD", "env-pass")
+	if got := c.PasswordValue(); got != "env-pass" {
+		t.Fatalf("PasswordValue() = %q, want env fallback", got)
+	}
+	if got := len(c.AuthMethod()); got != 1 {
+		t.Fatalf("AuthMethod() count = %d, want 1 with env fallback", got)
+	}
+
+	c.Password = "cfg-pass"
+	if got := c.PasswordValue(); got != "cfg-pass" {
+		t.Fatalf("PasswordValue() = %q, want config value to take precedence", got)
+	}
+}
+
 func Test_loadConfigFileReturnsMatchedPath(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "missing.yaml")

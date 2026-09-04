@@ -4,109 +4,470 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>sshs graph - {{.HostName}} ({{.HostIP}})</title>
-  <script src="https://gw.alipayobjects.com/os/lib/antv/g6/4.8.24/dist/g6.min.js"></script>
+  <script src="/cosmos.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1120; color: #f8fafc; }
+    :root {
+      --background: #09090b;
+      --foreground: #fafafa;
+      --card: #09090b;
+      --card-foreground: #fafafa;
+      --popover: #09090b;
+      --popover-foreground: #fafafa;
+      --primary: #fafafa;
+      --primary-foreground: #18181b;
+      --secondary: #27272a;
+      --secondary-foreground: #fafafa;
+      --muted: #18181b;
+      --muted-foreground: #a1a1aa;
+      --accent: #27272a;
+      --accent-foreground: #fafafa;
+      --destructive: #7f1d1d;
+      --destructive-foreground: #fafafa;
+      --border: #27272a;
+      --input: #27272a;
+      --ring: #71717a;
+      --radius: 0.5rem;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--background);
+      color: var(--foreground);
+    }
+
+    /* ===================== shadcn Header ===================== */
     #header {
-      height: 46px; background: #1e293b; border-bottom: 1px solid #334155;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 12px; z-index: 10; position: relative;
+      height: 52px;
+      background: rgba(9, 9, 11, 0.85);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 30;
+      position: relative;
+      gap: 16px;
     }
-    .header-left { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
     .badge-host {
-      background: #0284c7; color: #fff; font-weight: bold;
-      padding: 2px 8px; border-radius: 4px; font-size: 11px; letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: calc(var(--radius) - 2px);
+      border: 1px solid var(--border);
+      background: rgba(39, 39, 42, 0.4);
+      color: var(--foreground);
+      padding: 3px 9px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      letter-spacing: -0.01em;
     }
-    .host-ip { color: #94a3b8; font-size: 12px; font-weight: normal; }
-    .controls-group { display: flex; align-items: center; gap: 10px; font-size: 12px; margin-left: 6px; }
-    .controls-group label { cursor: pointer; display: flex; align-items: center; gap: 4px; color: #cbd5e1; }
-    .controls-group select, .controls-group input[type="number"] {
-      background: #0f172a; border: 1px solid #475569; color: #f8fafc;
-      padding: 3px 6px; border-radius: 4px; font-size: 12px; outline: none;
+    .badge-host:hover {
+      background: var(--accent);
+      border-color: #3f3f46;
+      box-shadow: 0 0 0 1px #3f3f46;
     }
-    .header-right { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .host-ip {
+      color: var(--muted-foreground);
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      flex-wrap: nowrap;
+    }
+    .search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .search-box input {
+      width: 210px;
+      height: 32px;
+      background: transparent;
+      border: 1px solid var(--input);
+      border-radius: calc(var(--radius) - 2px);
+      color: var(--foreground);
+      padding: 0 24px 0 10px;
+      font-size: 12px;
+      outline: none;
+      transition: all 0.15s ease-in-out;
+    }
+    .search-box input::placeholder {
+      color: var(--muted-foreground);
+      font-size: 12px;
+    }
+    .search-box input:focus {
+      width: 250px;
+      border-color: var(--ring);
+      box-shadow: 0 0 0 1px var(--ring);
+    }
+    .search-clear {
+      position: absolute;
+      right: 8px;
+      cursor: pointer;
+      color: var(--muted-foreground);
+      font-size: 11px;
+      display: none;
+      user-select: none;
+      transition: color 0.15s;
+    }
+    .search-clear:hover {
+      color: var(--foreground);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      border-radius: calc(var(--radius) - 2px);
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--foreground);
+      height: 32px;
+      padding: 0 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .btn:hover {
+      background: var(--accent);
+      color: var(--accent-foreground);
+      border-color: #3f3f46;
+    }
+    .btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 1px var(--ring);
+    }
+
     .status-indicator {
-      display: flex; align-items: center; gap: 6px; font-size: 11px;
-      padding: 2px 8px; border-radius: 10px; background: #0f172a; border: 1px solid #334155; color: #cbd5e1;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted-foreground);
+      padding: 3px 9px;
+      border-radius: 9999px;
+      border: 1px solid var(--border);
+      background: rgba(24, 24, 27, 0.5);
     }
     .status-dot {
-      width: 7px; height: 7px; border-radius: 50%; background: #10b981;
-      box-shadow: 0 0 5px #10b981; transition: all 0.3s;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 4px #10b981;
+      transition: background-color 0.2s;
     }
-    .status-dot.loading { background: #f59e0b; box-shadow: 0 0 5px #f59e0b; }
-    .status-dot.error { background: #ef4444; box-shadow: 0 0 5px #ef4444; }
-    .btn {
-      background: #334155; color: #f8fafc; border: 1px solid #475569;
-      padding: 3px 9px; border-radius: 4px; cursor: pointer; font-size: 12px;
-      display: flex; align-items: center; gap: 4px; transition: all 0.2s;
+    .status-dot.loading { background: #f59e0b; box-shadow: 0 0 4px #f59e0b; }
+    .status-dot.error { background: #ef4444; box-shadow: 0 0 4px #ef4444; }
+
+    /* ===================== 画布与图例 ===================== */
+    #container {
+      width: 100%;
+      height: calc(100vh - 52px);
+      position: relative;
+      overflow: hidden;
+      background: var(--background);
     }
-    .btn:hover { background: #38bdf8; color: #0f172a; }
-    .btn.primary { background: #0284c7; border-color: #38bdf8; }
-    .btn.primary:hover { background: #38bdf8; color: #0f172a; }
-    .btn.active { background: #0284c7; border-color: #38bdf8; color: #fff; font-weight: bold; }
-    #container { width: 100%; height: calc(100vh - 46px); position: relative; }
-    #mountNode { width: 100%; height: 100%; }
+    #mountNode {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 节点标签（shadcn 极简微徽章） */
+    #labels {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 10;
+    }
+    .node-label {
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.2;
+      padding: 1px 6px;
+      border-radius: calc(var(--radius) - 4px);
+      white-space: nowrap;
+      pointer-events: none;
+      user-select: none;
+      background: rgba(9, 9, 11, 0.88);
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      will-change: transform;
+      transition: opacity 0.2s;
+    }
+    .node-label.container-badge {
+      border-color: rgba(6, 182, 212, 0.5);
+    }
+
+    /* 悬浮即时信息卡片 (shadcn Tooltip) */
+    #hoverTooltip {
+      position: absolute;
+      display: none;
+      z-index: 40;
+      pointer-events: none;
+      background: rgba(9, 9, 11, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) - 2px);
+      padding: 8px 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+      font-size: 11px;
+      max-width: 320px;
+      color: var(--foreground);
+    }
+    .tooltip-title {
+      font-weight: 600;
+      font-size: 12px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tooltip-row {
+      margin-bottom: 3px;
+      color: var(--muted-foreground);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .tooltip-val {
+      color: var(--foreground);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    /* 底部图例（shadcn Toggle 胶囊组件） */
     .legend {
-      position: absolute; bottom: 12px; left: 12px;
-      background: rgba(30, 41, 59, 0.92); border: 1px solid #334155;
-      border-radius: 6px; padding: 6px 12px; display: flex; gap: 12px;
-      font-size: 11px; z-index: 20; align-items: center;
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(9, 9, 11, 0.85);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: var(--radius);
+      padding: 4px;
+      display: flex;
+      gap: 4px;
+      font-size: 11px;
+      z-index: 20;
+      align-items: center;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     }
-    .legend-item { display: flex; align-items: center; gap: 5px; }
-    .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: calc(var(--radius) - 2px);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+      color: var(--muted-foreground);
+      border: 1px solid transparent;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .legend-item:not(.static):hover {
+      background: var(--accent);
+      color: var(--foreground);
+    }
+    .legend-item.disabled {
+      opacity: 0.35;
+      text-decoration: line-through;
+      filter: grayscale(0.8);
+    }
+    .legend-item.static {
+      cursor: default;
+      color: var(--muted-foreground);
+    }
+    .legend-shape {
+      width: 8px;
+      height: 8px;
+      flex-shrink: 0;
+    }
+
+    /* ===================== 详情侧边抽屉 (shadcn Sheet) ===================== */
     #detailPanel {
-      position: absolute; top: 12px; right: 12px; width: 440px;
-      max-height: calc(100% - 24px); background: rgba(30, 41, 59, 0.95);
-      backdrop-filter: blur(10px); border: 1px solid #334155;
-      border-radius: 8px; padding: 14px; overflow-y: auto;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.6); display: none; z-index: 20;
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 480px;
+      height: 100%;
+      background: rgba(9, 9, 11, 0.95);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-left: 1px solid var(--border);
+      padding: 20px;
+      overflow-y: auto;
+      box-shadow: -8px 0 32px rgba(0, 0, 0, 0.7);
+      display: none;
+      z-index: 35;
+      animation: sheetIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    #detailPanel h3 {
-      font-size: 13px; margin-bottom: 8px; color: #38bdf8;
-      border-bottom: 1px solid #334155; padding-bottom: 6px;
+    @keyframes sheetIn {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
     }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .panel-header h3 {
+      font-size: 14px;
+      color: var(--foreground);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .panel-close {
+      cursor: pointer;
+      color: var(--muted-foreground);
+      font-size: 14px;
+      width: 26px;
+      height: 26px;
+      border-radius: calc(var(--radius) - 2px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .panel-close:hover {
+      color: var(--foreground);
+      background: var(--accent);
+    }
+
     .tuple-table {
-      width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px;
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 11px;
     }
     .tuple-table th, .tuple-table td {
-      border: 1px solid #334155; padding: 5px 7px; text-align: left;
+      border-bottom: 1px solid var(--border);
+      padding: 7px 8px;
+      text-align: left;
     }
-    .tuple-table th { background: #0f172a; color: #94a3b8; font-weight: 600; }
-    .tuple-table tr:nth-child(even) { background: rgba(15, 23, 42, 0.5); }
+    .tuple-table th {
+      color: var(--muted-foreground);
+      font-weight: 500;
+      font-size: 11px;
+      background: rgba(24, 24, 27, 0.5);
+    }
+    .tuple-table td {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: var(--foreground);
+    }
     .state-badge {
-      display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 10px;
-      background: #064e3b; color: #34d399; font-weight: bold;
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: rgba(16, 185, 129, 0.12);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+
+    /* 宿主诊断弹窗 (shadcn Dialog) */
+    #hostModal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 520px;
+      max-height: 80vh;
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.85);
+      display: none;
+      z-index: 50;
+      overflow-y: auto;
+    }
+    .modal-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      display: none;
+      z-index: 45;
     }
   </style>
 </head>
 <body>
   <div id="header">
     <div class="header-left">
-      <span class="badge-host">{{.HostName}}</span>
-      <span class="host-ip">({{.HostIP}})</span>
-      <div class="controls-group">
-        <span>显示范围:</span>
-        <label><input type="checkbox" id="chkLocal" checked onchange="onFilterChange()"> 本机内</label>
-        <label><input type="checkbox" id="chkInbound" checked onchange="onFilterChange()"> 进站</label>
-        <label><input type="checkbox" id="chkOutbound" checked onchange="onFilterChange()"> 出站</label>
-        <span style="margin-left: 6px;">协议:</span>
-        <label><input type="checkbox" id="chkTCP" checked onchange="onFilterChange()"> TCP</label>
-        <label><input type="checkbox" id="chkUDP" checked onchange="onFilterChange()"> UDP</label>
-        <span style="margin-left: 6px;">聚合阈值:</span>
-        <input type="number" id="thresholdInput" value="3" min="2" max="100" style="width: 44px; text-align: center;" onchange="onThresholdChange(this.value)">
-        <span style="margin-left: 6px;">定时刷新:</span>
-        <select id="intervalSelect" onchange="changeInterval()">
-          <option value="0" {{if eq .DefaultIntervalSec 0}}selected{{end}}>手动刷新</option>
-          <option value="5" {{if eq .DefaultIntervalSec 5}}selected{{end}}>5 秒</option>
-          <option value="10" {{if eq .DefaultIntervalSec 10}}selected{{end}}>10 秒</option>
-          <option value="20" {{if eq .DefaultIntervalSec 20}}selected{{end}}>20 秒</option>
-          <option value="30" {{if eq .DefaultIntervalSec 30}}selected{{end}}>30 秒</option>
-        </select>
-        <button class="btn" id="btnLayout" onclick="toggleLayout()">📊 分层流向</button>
+      <div class="badge-host" onclick="showHostModal()" title="点击查看本机监听端口与诊断信息">
+        <span>{{.HostName}}</span>
       </div>
+      <span class="host-ip">({{.HostIP}})</span>
     </div>
+
+    <div class="header-center">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="搜索 IP / 端口 / 进程..." oninput="onSearchInput(this.value)" onkeydown="if(event.key==='Enter')focusFirstSearchResult()">
+        <span class="search-clear" id="searchClear" onclick="clearSearch()">✕</span>
+      </div>
+
+    </div>
+
     <div class="header-right">
+      <button class="btn" id="btnFit" onclick="refitView()">居中适配</button>
       <div class="status-indicator">
         <div class="status-dot" id="statusDot"></div>
         <span id="statusText"></span>
@@ -115,43 +476,107 @@
   </div>
 
   <div id="container">
+    <!-- 底部图例（点击对应项目可快速切换显示/隐藏） -->
     <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background: #38bdf8;"></div><span id="legendServer">本机</span></div>
-      <div class="legend-item"><div class="legend-dot" style="background: #10b981;"></div><span id="legendInbound">入站 (0)</span></div>
-      <div class="legend-item"><div class="legend-dot" style="background: #f97316;"></div><span id="legendLocalClient">本机客户端 (0)</span></div>
-      <div class="legend-item"><div class="legend-dot" style="background: #3b82f6;"></div><span id="legendService">本机服务 (0)</span></div>
-      <div class="legend-item"><div class="legend-dot" style="background: #8b5cf6;"></div><span id="legendOutbound">出站 (0)</span></div>
+      <div class="legend-item" id="legendItem_client" onclick="toggleLegendType('client')" title="点击切换外部入站客户端显示/隐藏">
+        <div class="legend-shape" style="background: #10b981; border-radius: 50%;"></div>
+        <span id="legendInbound">外部入站 (0)</span>
+      </div>
+      <div class="legend-item" id="legendItem_service" onclick="toggleLegendType('service')" title="点击切换本机服务显示/隐藏">
+        <div class="legend-shape" style="background: #38bdf8; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);"></div>
+        <span id="legendService">本机服务 (0)</span>
+      </div>
+      <div class="legend-item" id="legendItem_local_client" onclick="toggleLegendType('local_client')" title="点击切换本机客户端进程显示/隐藏">
+        <div class="legend-shape" style="background: #f97316; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>
+        <span id="legendLocalClient">本机进程 (0)</span>
+      </div>
+      <div class="legend-item" id="legendItem_outbound" onclick="toggleLegendType('outbound')" title="点击切换外部出站目标显示/隐藏">
+        <div class="legend-shape" style="background: #a855f7; border-radius: 50%;"></div>
+        <span id="legendOutbound">外部出站 (0)</span>
+      </div>
+      <div class="legend-item static" title="带有 🐳 标识的节点运行于 Docker 容器网络命名空间内">
+        <div class="legend-shape" style="border: 2px solid #06b6d4; background: transparent;"></div>
+        <span>🐳 容器实例</span>
+      </div>
     </div>
 
+    <!-- 悬浮即时信息卡片 -->
+    <div id="hoverTooltip"></div>
+
+    <!-- 详情侧边抽屉 -->
     <div id="detailPanel">
-      <h3 id="detailTitle">连接详情</h3>
+      <div class="panel-header">
+        <h3 id="detailTitle">节点详情</h3>
+        <span class="panel-close" onclick="clearSelection()">✕</span>
+      </div>
       <div id="detailContent"></div>
     </div>
 
+    <!-- 宿主诊断弹窗 -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeHostModal()"></div>
+    <div id="hostModal">
+      <div class="panel-header">
+        <h3>本机监听与网络概览</h3>
+        <span class="panel-close" onclick="closeHostModal()">✕</span>
+      </div>
+      <div id="hostModalContent"></div>
+    </div>
+
     <div id="mountNode"></div>
+    <div id="labels"></div>
   </div>
 
   <script>
     let currentTopo = null;
     let refreshTimer = null;
     let currentIntervalSec = {{.DefaultIntervalSec}};
-    let aggregateThreshold = 3;      // 默认 3 条连接聚合为单条边
+    let aggregateThreshold = {{.DefaultAggregateThreshold}};
     let isFirstRender = true;
+    let shouldAutoFit = true;
 
-    // 配色统一规范：
-    // 本机服务（Service进程/服务边）: 蓝色系 (#3b82f6)
-    // 本机客户端（LocalClient进程/内部发起）: 橙色系 (#f97316)
-    // 外部入站体系（Client客户端/入站边）: 绿色系 (#10b981)
-    // 外部出站体系（Outbound目标/出站边）: 紫色系 (#8b5cf6)
-    const colors = {
-      server: { fill: '#1e3a8a', stroke: '#3b82f6', text: '#eff6ff' },
-      service: { fill: '#1d4ed8', stroke: '#60a5fa', text: '#eff6ff' },
-      local_client: { fill: '#7c2d12', stroke: '#f97316', text: '#fff7ed' },
-      client: { fill: '#064e3b', stroke: '#10b981', text: '#ecfdf5' },
-      outbound: { fill: '#4c1d95', stroke: '#8b5cf6', text: '#f5f3ff' },
-      edgeLocal: '#f97316',
-      edgeInbound: '#10b981',
-      edgeOutbound: '#8b5cf6'
+    // Cosmos 空间尺寸
+    const SPACE_SIZE = 4096;
+    const LINK_STYLE_SOLID = 0;
+    const LINK_STYLE_DASHED = 1;
+
+    // 节点类型视觉规范
+    const nodeVisualConfig = {
+      client: {
+        cluster: 0,
+        shape: 0, // Circle
+        color: '#10b981',
+        textColor: '#ecfdf5',
+        title: '外部入站客户端'
+      },
+      service: {
+        cluster: 1,
+        shape: 5, // Hexagon (容器则在构建时设为 Square)
+        color: '#38bdf8',
+        textColor: '#e0f2fe',
+        title: '本机监听服务'
+      },
+      local_client: {
+        cluster: 2,
+        shape: 2, // Triangle
+        color: '#f97316',
+        textColor: '#ffedd5',
+        title: '本机客户端进程'
+      },
+      outbound: {
+        cluster: 3,
+        shape: 0, // Circle (出站节点统一使用圆形)
+        color: '#a855f7',
+        textColor: '#f5f3ff',
+        title: '外部出站目标'
+      }
+    };
+
+    // 边类型颜色规范
+    const edgeColors = {
+      inbound: '#10b981',   // 绿色：外部入站流量
+      internal: '#38bdf8',  // 蓝色：本机内部进程互通
+      outbound: '#a855f7',  // 紫色：主动出站外联
+      listen: '#94a3b8'
     };
 
     function escapeHTML(value) {
@@ -165,657 +590,647 @@
       return String(value ?? '').replace(/[&<>"']/g, character => entities[character]);
     }
 
-    function onThresholdChange(val) {
-      const v = parseInt(val, 10);
-      if (!isNaN(v) && v >= 1) {
-        aggregateThreshold = v;
-        onFilterChange();
-      }
+    function hexToRgba(hex, alpha) {
+      const value = String(hex).replace('#', '');
+      return [
+        parseInt(value.substring(0, 2), 16) / 255,
+        parseInt(value.substring(2, 4), 16) / 255,
+        parseInt(value.substring(4, 6), 16) / 255,
+        alpha == null ? 1 : alpha
+      ];
     }
 
-    function processG6Data(topo) {
-      if (!topo || !topo.nodes) return { nodes: [], edges: [], combos: [] };
+    // ===================== 图数据全局状态与解析 =====================
+    let nodes = [];
+    let edges = [];
+    let nodeIndexById = new Map();
+    let lastStructureSignature = '';
+    const prevPositions = new Map(); // 节点 id -> [x, y]，平滑刷新保持位置稳定
 
-      // 1. 统计每个节点的边数 (degree) 与总连接数 (connCount)
+    function buildGraphData(topo) {
+      if (!topo || !topo.nodes || !topo.edges) {
+        return { nodes: [], edges: [] };
+      }
+
+      const builtNodes = [];
+      const builtEdges = [];
+
+      // 1. 统计各节点关联边数及连接总数
       const nodeEdgeCounts = {};
       const nodeConnCounts = {};
-      (topo.edges || []).forEach(e => {
-        const cnt = e.connCount || (e.details ? e.details.length : 1);
-        nodeEdgeCounts[e.source] = (nodeEdgeCounts[e.source] || 0) + 1;
-        nodeEdgeCounts[e.target] = (nodeEdgeCounts[e.target] || 0) + 1;
-        nodeConnCounts[e.source] = (nodeConnCounts[e.source] || 0) + cnt;
-        nodeConnCounts[e.target] = (nodeConnCounts[e.target] || 0) + cnt;
+      topo.edges.forEach(edge => {
+        const count = edge.connCount || (edge.details ? edge.details.length : 1);
+        nodeEdgeCounts[edge.source] = (nodeEdgeCounts[edge.source] || 0) + 1;
+        nodeEdgeCounts[edge.target] = (nodeEdgeCounts[edge.target] || 0) + 1;
+        nodeConnCounts[edge.source] = (nodeConnCounts[edge.source] || 0) + count;
+        nodeConnCounts[edge.target] = (nodeConnCounts[edge.target] || 0) + count;
       });
 
-      // 2. 节点根据边数和连接数动态自适应尺寸（边越多、连接越多，节点显著放大且更突出）
-      const nodes = topo.nodes.map(n => {
-        let style = colors[n.nodeType] || colors.server;
+      // 2. 节点分类归并与自适应尺寸（统一调大，更加清晰易读）
+      topo.nodes.forEach(rawNode => {
+        const degree = nodeEdgeCounts[rawNode.id] || 0;
+        const totalConns = nodeConnCounts[rawNode.id] || 1;
 
-        const degree = nodeEdgeCounts[n.id] || 0;
-        const conns = nodeConnCounts[n.id] || 1;
+        // 尺寸区分：基础尺寸整体放大，关键服务突出展示，连接量越高尺寸越大
+        let baseSize = 14;
+        if (rawNode.nodeType === 'service') baseSize = 24;
+        else if (rawNode.nodeType === 'local_client') baseSize = 18;
 
-        // 基础直径 16px，每多 1 条关联边增加 3.5px 直径，连接数额外对数加成，最大可达 65px+
-        const degreeScale = Math.min(degree, 12) * 3.5;
-        const connScale = Math.min(Math.log2(conns), 6) * 2.5;
-        const nodeSize = Math.round(16 + degreeScale + connScale);
-        const strokeWidth = nodeSize >= 42 ? 3.5 : (nodeSize >= 28 ? 2.5 : 1.8);
+        const size = baseSize + Math.min(degree, 10) * 1.2 + Math.min(Math.log2(totalConns), 6) * 1.0;
 
-        let comboId = undefined;
-        if (currentLayoutType !== 'force') {
-          if (n.nodeType === 'service') {
-            comboId = 'combo_services';
-          } else if (n.nodeType === 'client') {
-            comboId = 'combo_inbound';
-          } else if (n.nodeType === 'local_client') {
-            comboId = 'combo_local_clients';
-          } else if (n.nodeType === 'outbound') {
-            comboId = 'combo_outbound';
-          }
-        }
-
-        let labelText = String(n.label || '');
-        if (n.is_container && !labelText.startsWith('🐳')) {
+        let labelText = String(rawNode.label || '');
+        if (rawNode.is_container && !labelText.startsWith('🐳')) {
           labelText = '🐳 ' + labelText;
         }
 
-        return {
-          id: n.id,
+        const visual = nodeVisualConfig[rawNode.nodeType] || nodeVisualConfig.service;
+        // 容器实例采用 Square 几何形状以形成鲜明区隔
+        const shape = rawNode.is_container ? 1 : visual.shape;
+        const color = rawNode.is_container && rawNode.nodeType === 'service' ? '#06b6d4' : visual.color;
+
+        builtNodes.push({
+          id: rawNode.id,
           label: labelText,
-          nodeType: n.nodeType,
-          cluster: n.nodeType,
-          comboId: comboId,
-          combo: comboId,
-          is_container: n.is_container,
-          ip: n.ip,
-          port: n.port,
-          process: n.process,
-          proto: n.proto,
-          level: n.level || 1,
-          type: 'circle',
-          size: nodeSize,
-          data: {
-            id: n.id,
-            label: labelText,
-            nodeType: n.nodeType,
-            cluster: n.nodeType,
-            is_container: n.is_container,
-            ip: n.ip,
-            port: n.port,
-            process: n.process,
-            proto: n.proto
-          },
-          style: {
-            fill: style.fill,
-            stroke: style.stroke,
-            lineWidth: strokeWidth,
-            cursor: 'pointer',
-            size: nodeSize,
-            labelText: labelText,
-            labelPlacement: 'bottom',
-            labelFill: style.text || '#f8fafc',
-            labelFontSize: 11,
-            labelFontFamily: 'monospace'
-          },
-          labelCfg: {
-            position: 'bottom',
-            offset: 6,
-            style: {
-              fill: style.text || '#f8fafc',
-              fontSize: 11,
-              fontFamily: 'monospace'
-            }
-          }
-        };
+          nodeType: rawNode.nodeType,
+          is_container: rawNode.is_container,
+          ip: rawNode.ip,
+          port: rawNode.port,
+          process: rawNode.process,
+          proto: rawNode.proto,
+          size: Math.round(size),
+          shape: shape,
+          color: color,
+          cluster: visual.cluster,
+          degree: degree,
+          totalConns: totalConns
+        });
       });
 
-      // 在 Force 力导向模式下添加本机中心节点，将服务和客户端进程连接在一起
-      if (currentLayoutType === 'force') {
-        const hostLabel = topo.host_name || '本机';
-        nodes.push({
-          id: 'node_server',
-          label: hostLabel,
-          nodeType: 'server',
-          cluster: 'server',
-          ip: topo.host_ip,
-          level: 2.5,
-          type: 'circle',
-          size: 32,
-          data: {
-            id: 'node_server',
-            label: hostLabel,
-            nodeType: 'server',
-            cluster: 'server',
-            ip: topo.host_ip
-          },
-          style: {
-            fill: '#0f172a',
-            stroke: '#38bdf8',
-            lineWidth: 3,
-            cursor: 'pointer',
-            size: 32,
-            labelText: hostLabel,
-            labelPlacement: 'bottom',
-            labelFill: '#38bdf8',
-            labelFontSize: 12,
-            labelFontWeight: 'bold',
-            labelFontFamily: 'monospace'
-          },
-          labelCfg: {
-            position: 'bottom',
-            offset: 6,
-            style: {
-              fill: '#38bdf8',
-              fontSize: 12,
-              fontWeight: 'bold',
-              fontFamily: 'monospace'
-            }
-          }
-        });
-      }
+      // 3. 边处理：达到聚合阈值进行汇总，否则按明细拆分为微观连线
+      (topo.edges || []).forEach(rawEdge => {
+        const count = rawEdge.connCount || (rawEdge.details ? rawEdge.details.length : 1);
+        const strokeColor = edgeColors[rawEdge.edgeType] || '#94a3b8';
+        const isUDP = (rawEdge.proto || '').toLowerCase().startsWith('udp');
 
-      // 3. 边处理：
-      // - 线型规范：Force 模式统一使用 line，Dagre 模式统一使用 cubic-horizontal
-      // - UDP 统一虚线 [5, 4]，TCP 统一实线 undefined
-      const edgeShapeType = currentLayoutType === 'force' ? 'line' : 'cubic-horizontal';
-      const edges = [];
-      (topo.edges || []).forEach(e => {
-        const count = e.connCount || (e.details ? e.details.length : 1);
-        const isListen = e.edgeType === 'listen';
-        const isUDP = (e.proto || '').toLowerCase().startsWith('udp');
-        const lineDash = isUDP ? [5, 4] : undefined; // UDP 用虚线，TCP 用实线
-
-        let stroke = colors.edgeInbound;
-        let endArrow = { path: G6.Arrow.triangle(6, 8, 0), fill: stroke };
-
-        if (e.edgeType === 'listen') {
-          stroke = colors.edgeLocal;
-          endArrow = { path: G6.Arrow.triangle(5, 6, 0), fill: stroke };
-        } else if (e.edgeType === 'internal') {
-          stroke = colors.edgeLocal;
-          endArrow = { path: G6.Arrow.triangle(6, 8, 0), fill: stroke };
-        } else if (e.edgeType === 'inbound') {
-          stroke = colors.edgeInbound;
-          endArrow = { path: G6.Arrow.triangle(6, 8, 0), fill: stroke };
-        } else if (e.edgeType === 'outbound') {
-          stroke = colors.edgeOutbound;
-          endArrow = { path: G6.Arrow.triangle(6, 8, 0), fill: stroke };
-        }
-
-        if (isListen || count >= aggregateThreshold) {
-          // 挂载边，或连接数达到阈值：聚合成一条边
-          let label = undefined;
-          if (!isListen && count > 1) {
-            label = count + ' conns'; // 聚合时只显示连接数量
-          }
-
-          edges.push({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            label: label,
-            edgeType: e.edgeType,
-            proto: e.proto,
+        if (count >= aggregateThreshold || rawEdge.edgeType === 'listen') {
+          builtEdges.push({
+            id: rawEdge.id,
+            source: rawEdge.source,
+            target: rawEdge.target,
+            edgeType: rawEdge.edgeType,
+            proto: rawEdge.proto,
             connCount: count,
-            details: e.details,
-            type: edgeShapeType,
-            data: {
-              id: e.id,
-              edgeType: e.edgeType,
-              proto: e.proto,
-              connCount: count,
-              details: e.details
-            },
-            style: {
-              stroke: stroke,
-              lineWidth: isListen ? 1.5 : Math.min(2 + Math.log2(count), 7),
-              lineDash: lineDash,
-              endArrow: endArrow,
-              cursor: 'pointer',
-              labelText: label,
-              labelBackground: !!label,
-              labelFill: '#e2e8f0',
-              labelFontSize: 10,
-              labelFontFamily: 'monospace'
-            },
-            labelCfg: label ? {
-              autoRotate: true,
-              style: {
-                fill: '#e2e8f0',
-                fontSize: 10,
-                fontFamily: 'monospace',
-                background: {
-                  fill: '#0f172a',
-                  stroke: '#334155',
-                  padding: [2, 5, 2, 5],
-                  radius: 3
-                }
-              }
-            } : undefined
+            details: rawEdge.details || [],
+            color: strokeColor,
+            alpha: 0.8,
+            width: Math.min(1.8 + Math.log2(count) * 0.9, 6.5),
+            dashed: isUDP,
+            arrow: true
           });
         } else {
-          // 连接数未达到阈值：一个连接一条边，边不显示任何描述
-          const details = e.details && e.details.length > 0 ? e.details : [{}];
-          const total = details.length;
-          details.forEach((d, idx) => {
-            let curveOffset = 0;
-            if (total > 1 && edgeShapeType !== 'line') {
-              curveOffset = (idx - (total - 1) / 2) * 14;
-            }
-            const singleProto = d.proto || e.proto || '';
-            const singleIsUDP = singleProto.toLowerCase().startsWith('udp');
-            const singleLineDash = singleIsUDP ? [5, 4] : undefined;
-
-            edges.push({
-              id: e.id + '_' + idx,
-              source: e.source,
-              target: e.target,
-              label: undefined, // 未聚合不显示描述
-              edgeType: e.edgeType,
+          const details = rawEdge.details && rawEdge.details.length > 0 ? rawEdge.details : [{}];
+          details.forEach((detail, idx) => {
+            const singleProto = detail.proto || rawEdge.proto || '';
+            builtEdges.push({
+              id: rawEdge.id + '_' + idx,
+              source: rawEdge.source,
+              target: rawEdge.target,
+              edgeType: rawEdge.edgeType,
               proto: singleProto,
               connCount: 1,
-              details: [d],
-              curveOffset: curveOffset,
-              type: edgeShapeType,
-              data: {
-                id: e.id + '_' + idx,
-                edgeType: e.edgeType,
-                proto: singleProto,
-                connCount: 1,
-                details: [d]
-              },
-              style: {
-                stroke: stroke,
-                lineWidth: 1.5,
-                lineDash: singleLineDash,
-                endArrow: endArrow,
-                cursor: 'pointer'
-              }
+              details: [detail],
+              color: strokeColor,
+              alpha: 0.75,
+              width: 1.6,
+              dashed: singleProto.toLowerCase().startsWith('udp'),
+              arrow: true
             });
           });
         }
       });
 
-      // 在 Force 模式下为本机服务与客户端进程建立与本机中心节点的关联边
-      if (currentLayoutType === 'force') {
-        nodes.forEach(n => {
-          if (n.nodeType === 'service') {
-            edges.push({
-              id: 'host_srv_' + n.id,
-              source: 'node_server',
-              target: n.id,
-              edgeType: 'internal',
-              type: 'line',
-              style: {
-                stroke: 'rgba(96, 165, 250, 0.45)',
-                lineWidth: 1.5,
-                lineDash: [3, 3]
-              }
-            });
-          } else if (n.nodeType === 'local_client') {
-            edges.push({
-              id: 'host_client_' + n.id,
-              source: 'node_server',
-              target: n.id,
-              edgeType: 'internal',
-              type: 'line',
-              style: {
-                stroke: 'rgba(249, 115, 22, 0.45)',
-                lineWidth: 1.5,
-                lineDash: [3, 3]
-              }
-            });
+      return { nodes: builtNodes, edges: builtEdges };
+    }
+
+    // ===================== Cosmos.Graph 渲染引擎 (极速稳定力导向) =====================
+
+    const mountNode = document.getElementById('mountNode');
+
+    const graph = new Cosmos.Graph(mountNode, {
+      spaceSize: SPACE_SIZE,
+      backgroundColor: '#09090b',
+      fitViewOnInit: false,
+      fitViewDelay: 0,
+      fitViewDuration: 0,
+      fitViewPadding: 0.15,
+      enableDrag: true,
+      transitionDuration: 0,
+      pointGreyoutOpacity: 0.12,
+      linkGreyoutOpacity: 0.05,
+      renderHoveredPointRing: true,
+      hoveredPointRingColor: '#38bdf8',
+      focusedPointRingColor: '#38bdf8',
+      hoveredPointCursor: 'pointer',
+      hoveredLinkCursor: 'pointer',
+      hoveredLinkWidthIncrease: 2.2,
+      curvedLinks: true,
+      curvedLinkSegments: 25,
+      curvedLinkWeight: 0.45,
+      curvedLinkControlPointDistance: 0.35,
+      linkDefaultArrows: true,
+      linkArrowsSizeScale: 1.3,
+      linkBlending: true,
+      // 强斥力防聚团、强碰撞安全保护、充裕连线车距防标签重叠、极低中心引力
+      simulationGravity: 0.005,
+      simulationRepulsion: 4.5,
+      simulationLinkSpring: 0.5,
+      simulationLinkDistance: 220,
+      simulationCluster: 0.05,
+      simulationCollision: 1.0,
+      simulationCollisionRadius: 70,
+      simulationCollisionPadding: 20,
+      simulationFriction: 0.82,
+      simulationDecay: 1000,
+      onPointClick: index => selectNode(index),
+      onLinkClick: linkIndex => showEdgeDetails(linkIndex),
+      onBackgroundClick: () => clearSelection(),
+      onPointMouseOver: (index, pos, event) => showPointTooltip(index, event),
+      onPointMouseOut: () => hideTooltip(),
+      onLinkMouseOver: (linkIndex, event) => showLinkTooltip(linkIndex, event),
+      onLinkMouseOut: () => hideTooltip(),
+      onZoom: () => requestLabelUpdate(),
+      onSimulationTick: () => requestLabelUpdate(),
+      onSimulationEnd: () => {
+        requestLabelUpdate();
+        if (shouldAutoFit) {
+          shouldAutoFit = false;
+          graph.fitView(250, 0.15);
+        }
+      },
+      onDragStart: () => {
+        graph.start(0.2);
+        const draggingIndex = graph.store.draggingPointIndex;
+        if (draggingIndex !== undefined && draggingIndex !== null) {
+          graph.setPinnedPoints([draggingIndex]);
+        }
+      },
+      onDragEnd: () => {
+        graph.setPinnedPoints(null);
+      }
+    });
+
+    function renderGraph(topo) {
+      // 捕获上一帧坐标，确保刷新时已有节点纹丝不动
+      if (graph.isReady && nodes.length > 0) {
+        try {
+          const positions = graph.getPointPositions();
+          nodes.forEach((node, idx) => {
+            const x = positions[idx * 2];
+            const y = positions[idx * 2 + 1];
+            if (Number.isFinite(x) && Number.isFinite(y)) {
+              prevPositions.set(node.id, [x, y]);
+            }
+          });
+        } catch (err) {}
+      }
+
+      const built = buildGraphData(topo);
+      nodes = built.nodes;
+      edges = built.edges;
+      nodeIndexById = new Map(nodes.map((node, idx) => [node.id, idx]));
+
+      const totalPoints = nodes.length;
+      const pointPositions = new Float32Array(totalPoints * 2);
+      const pointSizes = new Float32Array(totalPoints);
+      const pointColors = new Float32Array(totalPoints * 4);
+      const pointShapes = new Float32Array(totalPoints);
+      const pointClusters = new Array(totalPoints);
+
+      // 拓扑邻居关系探测，用于初次就近布局
+      const serviceIndices = [];
+      const clientIndices = [];
+      const localClientIndices = [];
+      const outboundIndices = [];
+
+      nodes.forEach((node, idx) => {
+        if (node.nodeType === 'service') serviceIndices.push(idx);
+        else if (node.nodeType === 'client') clientIndices.push(idx);
+        else if (node.nodeType === 'local_client') localClientIndices.push(idx);
+        else if (node.nodeType === 'outbound') outboundIndices.push(idx);
+      });
+
+      const peerOfIndex = new Map();
+      const clientsByPeer = new Map();
+      const outboundByPeer = new Map();
+
+      edges.forEach(e => {
+        const sIdx = nodeIndexById.get(e.source);
+        const tIdx = nodeIndexById.get(e.target);
+        if (sIdx !== undefined && tIdx !== undefined) {
+          if (!peerOfIndex.has(sIdx)) peerOfIndex.set(sIdx, tIdx);
+          if (!peerOfIndex.has(tIdx)) peerOfIndex.set(tIdx, sIdx);
+
+          const sNode = nodes[sIdx];
+          const tNode = nodes[tIdx];
+          if (sNode.nodeType === 'client') {
+            if (!clientsByPeer.has(tIdx)) clientsByPeer.set(tIdx, []);
+            clientsByPeer.get(tIdx).push(sIdx);
           }
-        });
-      }
-
-      const combos = [];
-      if (currentLayoutType !== 'force') {
-        const hasInbound = nodes.some(n => n.comboId === 'combo_inbound');
-        const hasLocalClients = nodes.some(n => n.comboId === 'combo_local_clients');
-        const hasServices = nodes.some(n => n.comboId === 'combo_services');
-        const hasOutbound = nodes.some(n => n.comboId === 'combo_outbound');
-
-        if (hasInbound) {
-          combos.push({
-            id: 'combo_inbound',
-            label: '外部入站客户端 (Inbound)',
-            type: 'rect',
-            data: { label: '外部入站客户端 (Inbound)' },
-            style: {
-              fill: 'rgba(6, 78, 59, 0.08)',
-              stroke: '#10b981',
-              lineWidth: 1.5,
-              lineDash: [4, 4],
-              radius: 8,
-              padding: 20,
-              labelText: '外部入站客户端 (Inbound)',
-              labelPlacement: 'top',
-              labelFill: '#34d399',
-              labelFontSize: 12,
-              labelFontWeight: 'bold',
-              labelFontFamily: 'monospace'
-            },
-            labelCfg: {
-              position: 'top',
-              refY: 8,
-              style: {
-                fill: '#34d399',
-                fontSize: 12,
-                fontWeight: 'bold',
-                fontFamily: 'monospace'
-              }
-            }
-          });
-        }
-
-        if (hasLocalClients) {
-          combos.push({
-            id: 'combo_local_clients',
-            label: '本机客户端进程 (Local Clients)',
-            type: 'rect',
-            data: { label: '本机客户端进程 (Local Clients)' },
-            style: {
-              fill: 'rgba(234, 88, 12, 0.08)',
-              stroke: '#f97316',
-              lineWidth: 1.5,
-              lineDash: [4, 4],
-              radius: 8,
-              padding: 20,
-              labelText: '本机客户端进程 (Local Clients)',
-              labelPlacement: 'top',
-              labelFill: '#fdba74',
-              labelFontSize: 12,
-              labelFontWeight: 'bold',
-              labelFontFamily: 'monospace'
-            },
-            labelCfg: {
-              position: 'top',
-              refY: 8,
-              style: {
-                fill: '#fdba74',
-                fontSize: 12,
-                fontWeight: 'bold',
-                fontFamily: 'monospace'
-              }
-            }
-          });
-        }
-
-        if (hasServices) {
-          combos.push({
-            id: 'combo_services',
-            label: '本机服务进程 (Local Services)',
-            type: 'rect',
-            data: { label: '本机服务进程 (Local Services)' },
-            style: {
-              fill: 'rgba(30, 58, 138, 0.08)',
-              stroke: '#3b82f6',
-              lineWidth: 1.5,
-              lineDash: [4, 4],
-              radius: 8,
-              padding: 20,
-              labelText: '本机服务进程 (Local Services)',
-              labelPlacement: 'top',
-              labelFill: '#60a5fa',
-              labelFontSize: 12,
-              labelFontWeight: 'bold',
-              labelFontFamily: 'monospace'
-            },
-            labelCfg: {
-              position: 'top',
-              refY: 8,
-              style: {
-                fill: '#60a5fa',
-                fontSize: 12,
-                fontWeight: 'bold',
-                fontFamily: 'monospace'
-              }
-            }
-          });
-        }
-
-        if (hasOutbound) {
-          combos.push({
-            id: 'combo_outbound',
-            label: '外部出站目标 (Outbound)',
-            type: 'rect',
-            data: { label: '外部出站目标 (Outbound)' },
-            style: {
-              fill: 'rgba(76, 29, 149, 0.08)',
-              stroke: '#8b5cf6',
-              lineWidth: 1.5,
-              lineDash: [4, 4],
-              radius: 8,
-              padding: 20,
-              labelText: '外部出站目标 (Outbound)',
-              labelPlacement: 'top',
-              labelFill: '#a78bfa',
-              labelFontSize: 12,
-              labelFontWeight: 'bold',
-              labelFontFamily: 'monospace'
-            },
-            labelCfg: {
-              position: 'top',
-              refY: 8,
-              style: {
-                fill: '#a78bfa',
-                fontSize: 12,
-                fontWeight: 'bold',
-                fontFamily: 'monospace'
-              }
-            }
-          });
-        }
-      }
-
-      updateLegendCounts(nodes);
-      return { nodes, edges, combos };
-    }
-
-    function updateLegendCounts(nodes) {
-      const counts = {
-        server: 0,
-        client: 0,
-        local_client: 0,
-        service: 0,
-        outbound: 0
-      };
-
-      (nodes || []).forEach(n => {
-        const type = n.nodeType || (n.data && n.data.nodeType);
-        if (counts.hasOwnProperty(type)) {
-          counts[type]++;
+          if (tNode.nodeType === 'outbound') {
+            if (!outboundByPeer.has(sIdx)) outboundByPeer.set(sIdx, []);
+            outboundByPeer.get(sIdx).push(tIdx);
+          }
         }
       });
 
-      const elServer = document.getElementById('legendServer');
-      const elInbound = document.getElementById('legendInbound');
-      const elLocalClient = document.getElementById('legendLocalClient');
-      const elService = document.getElementById('legendService');
-      const elOutbound = document.getElementById('legendOutbound');
+      const centerX = SPACE_SIZE / 2;
+      const centerY = SPACE_SIZE / 2;
 
-      if (elServer) elServer.innerText = '本机' + (counts.server > 0 ? ' (' + counts.server + ')' : '');
-      if (elInbound) elInbound.innerText = '入站 (' + counts.client + ')';
-      if (elLocalClient) elLocalClient.innerText = '本机客户端 (' + counts.local_client + ')';
-      if (elService) elService.innerText = '本机服务 (' + counts.service + ')';
-      if (elOutbound) elOutbound.innerText = '出站 (' + counts.outbound + ')';
-    }
+      // 1. 服务节点开阔中心环：半径随服务数自适应，与物理力导向自然平衡尺寸对齐
+      const sCount = serviceIndices.length;
+      const sRadius = sCount <= 1 ? 0 : Math.max(90, 50 + sCount * 10);
+      serviceIndices.forEach((sIdx, i) => {
+        if (prevPositions.has(nodes[sIdx].id)) return;
+        const ang = sCount === 1 ? 0 : (i / sCount) * 2 * Math.PI - Math.PI / 2;
+        pointPositions[sIdx * 2] = centerX + Math.cos(ang) * sRadius;
+        pointPositions[sIdx * 2 + 1] = centerY + Math.sin(ang) * sRadius;
+      });
 
-    const container = document.getElementById('container');
-    const width = container.scrollWidth;
-    const height = container.scrollHeight || 600;
+      // 2. 本机客户端进程置于过渡环
+      const lcCount = localClientIndices.length;
+      const lcRadius = sRadius + 60;
+      localClientIndices.forEach((lcIdx, i) => {
+        if (prevPositions.has(nodes[lcIdx].id)) return;
+        const ang = (i / (lcCount || 1)) * 2 * Math.PI + Math.PI / 4;
+        pointPositions[lcIdx * 2] = centerX + Math.cos(ang) * lcRadius;
+        pointPositions[lcIdx * 2 + 1] = centerY + Math.sin(ang) * lcRadius;
+      });
 
-    const layoutConfigs = {
-      dagre: {
-        type: 'dagre',
-        rankdir: 'LR',
-        align: 'UL',
-        nodesep: 35,
-        ranksep: 130,
-        controlPoints: true,
-        sortByCombo: true
-      },
-      force: {
-        type: 'force',
-        linkDistance: 85,
-        clustering: true,
-        nodeClusterBy: 'cluster',
-        clusterNodeStrength: 70,
-        preventOverlap: true,
-        nodeSpacing: 25,
-        nodeStrength: 80,
-        collideStrength: 0.85
+      // 3. 外部入站客户端：以对应服务为基准向外/向左放射扇形排布
+      clientIndices.forEach(cIdx => {
+        if (prevPositions.has(nodes[cIdx].id)) return;
+        const peerIdx = peerOfIndex.get(cIdx);
+        const px = peerIdx !== undefined ? pointPositions[peerIdx * 2] : centerX;
+        const py = peerIdx !== undefined ? pointPositions[peerIdx * 2 + 1] : centerY;
+
+        let baseAng = Math.PI; // 默认朝左（入站）
+        if (peerIdx !== undefined) {
+          const dirX = px - centerX;
+          const dirY = py - centerY;
+          if (Math.hypot(dirX, dirY) > 10) {
+            baseAng = Math.atan2(dirY, dirX);
+          }
+        }
+
+        const siblings = peerIdx !== undefined ? (clientsByPeer.get(peerIdx) || [cIdx]) : [cIdx];
+        const sibIdx = siblings.indexOf(cIdx);
+        const totalSib = siblings.length;
+        const spread = Math.min(Math.PI * 0.85, (totalSib - 1) * (Math.PI / 6));
+        const offsetAng = totalSib > 1 ? (sibIdx / (totalSib - 1) - 0.5) * spread : 0;
+        const ang = baseAng + offsetAng;
+        const dist = 110 + (sibIdx % 2) * 20;
+
+        pointPositions[cIdx * 2] = px + Math.cos(ang) * dist;
+        pointPositions[cIdx * 2 + 1] = py + Math.sin(ang) * dist;
+      });
+
+      // 4. 外部出站目标：以对应进程/服务为基准向外/向右放射扇形排布
+      outboundIndices.forEach(oIdx => {
+        if (prevPositions.has(nodes[oIdx].id)) return;
+        const peerIdx = peerOfIndex.get(oIdx);
+        const px = peerIdx !== undefined ? pointPositions[peerIdx * 2] : centerX;
+        const py = peerIdx !== undefined ? pointPositions[peerIdx * 2 + 1] : centerY;
+
+        let baseAng = 0; // 默认朝右（出站）
+        if (peerIdx !== undefined) {
+          const dirX = px - centerX;
+          const dirY = py - centerY;
+          if (Math.hypot(dirX, dirY) > 10) {
+            baseAng = Math.atan2(dirY, dirX);
+          }
+        }
+
+        const siblings = peerIdx !== undefined ? (outboundByPeer.get(peerIdx) || [oIdx]) : [oIdx];
+        const sibIdx = siblings.indexOf(oIdx);
+        const totalSib = siblings.length;
+        const spread = Math.min(Math.PI * 0.85, (totalSib - 1) * (Math.PI / 6));
+        const offsetAng = totalSib > 1 ? (sibIdx / (totalSib - 1) - 0.5) * spread : 0;
+        const ang = baseAng + offsetAng;
+        const dist = 110 + (sibIdx % 2) * 20;
+
+        pointPositions[oIdx * 2] = px + Math.cos(ang) * dist;
+        pointPositions[oIdx * 2 + 1] = py + Math.sin(ang) * dist;
+      });
+
+      // 5. 兜底未匹配节点：均匀分布于外环
+      nodes.forEach((node, idx) => {
+        if (pointPositions[idx * 2] === 0 && pointPositions[idx * 2 + 1] === 0 && !prevPositions.has(node.id)) {
+          const ang = (idx / (totalPoints || 1)) * 2 * Math.PI;
+          pointPositions[idx * 2] = centerX + Math.cos(ang) * (sRadius + 140);
+          pointPositions[idx * 2 + 1] = centerY + Math.sin(ang) * (sRadius + 140);
+        }
+      });
+
+      // 6. 填入并同步已有位置及属性
+      nodes.forEach((node, idx) => {
+        const prev = prevPositions.get(node.id);
+        if (prev) {
+          pointPositions[idx * 2] = prev[0];
+          pointPositions[idx * 2 + 1] = prev[1];
+        }
+
+        pointSizes[idx] = node.size;
+        pointShapes[idx] = node.shape;
+        const rgba = hexToRgba(node.color);
+        pointColors[idx * 4] = rgba[0];
+        pointColors[idx * 4 + 1] = rgba[1];
+        pointColors[idx * 4 + 2] = rgba[2];
+        pointColors[idx * 4 + 3] = rgba[3];
+        pointClusters[idx] = node.cluster;
+      });
+
+      const totalLinks = edges.length;
+      const links = new Float32Array(totalLinks * 2);
+      const linkColors = new Float32Array(totalLinks * 4);
+      const linkWidths = new Float32Array(totalLinks);
+      const linkStyles = new Float32Array(totalLinks);
+      const linkArrows = new Array(totalLinks);
+
+      edges.forEach((edge, idx) => {
+        links[idx * 2] = nodeIndexById.get(edge.source);
+        links[idx * 2 + 1] = nodeIndexById.get(edge.target);
+        const rgba = hexToRgba(edge.color, edge.alpha);
+        linkColors[idx * 4] = rgba[0];
+        linkColors[idx * 4 + 1] = rgba[1];
+        linkColors[idx * 4 + 2] = rgba[2];
+        linkColors[idx * 4 + 3] = rgba[3];
+        linkWidths[idx] = edge.width;
+        linkStyles[idx] = edge.dashed ? LINK_STYLE_DASHED : LINK_STYLE_SOLID;
+        linkArrows[idx] = !!edge.arrow;
+      });
+
+      graph.setPointPositions(pointPositions);
+      graph.setPointSizes(pointSizes);
+      graph.setPointColors(pointColors);
+      graph.setPointShapes(pointShapes);
+      graph.setPointClusters(pointClusters);
+      graph.setLinks(links);
+      graph.setLinkColors(linkColors);
+      graph.setLinkWidths(linkWidths);
+      graph.setLinkStyles(linkStyles);
+      graph.setLinkArrows(linkArrows);
+      graph.trackPointPositionsByIndices(nodes.map((_, idx) => idx));
+
+      syncLabels();
+      clearSelection(true);
+      updateLegendCounts();
+
+      // 判断拓扑结构变化，避免定时刷新时页面晃动
+      const signature = nodes.map(n => n.id).join(',') + '|' + edges.map(e => e.id).join(',');
+      const structureChanged = signature !== lastStructureSignature;
+      lastStructureSignature = signature;
+
+      // 首帧启动物理引擎充沛能量开散
+      const alpha = isFirstRender ? 0.75 : (structureChanged ? 0.25 : 0.03);
+      graph.render(alpha, 0);
+      if (isFirstRender || structureChanged) {
+        shouldAutoFit = true;
+        graph.start(alpha);
       }
-    };
 
-    let currentLayoutType = 'force';
-
-    function toggleLayout() {
-      const btn = document.getElementById('btnLayout');
-      if (currentLayoutType === 'force') {
-        currentLayoutType = 'dagre';
-        graph.updateLayout(layoutConfigs.dagre);
-        btn.innerText = '⚡ Force 聚类';
-        btn.classList.add('active');
-      } else {
-        currentLayoutType = 'force';
-        graph.updateLayout(layoutConfigs.force);
-        btn.innerText = '📊 分层流向';
-        btn.classList.remove('active');
-      }
-      onFilterChange();
-      setTimeout(() => {
-        graph.fitView(40);
-      }, 350);
-    }
-
-    const graph = new G6.Graph({
-      container: 'mountNode',
-      width,
-      height,
-      layout: layoutConfigs.force,
-      fitView: true,
-      fitViewPadding: [40, 40, 40, 40],
-      groupByTypes: false,
-      behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element'],
-      modes: {
-        default: ['drag-canvas', 'zoom-canvas', 'drag-node', 'drag-combo']
-      },
-      defaultNode: {
-        type: 'circle'
-      },
-      defaultCombo: {
-        type: 'rect',
-        padding: [24, 16, 16, 16]
-      }
-    });
-
-    graph.on('afterlayout', () => {
+      // 首次加载在仿真快速展开微调落位期间（200ms, 450ms, 750ms）连续自适应居中适配
       if (isFirstRender) {
-        graph.fitView(40);
         isFirstRender = false;
-      }
-    });
-
-    graph.on('node:click', e => {
-      const nodeItem = e.item;
-      const model = nodeItem.getModel();
-      showNodeDetails(model, nodeItem);
-      highlightRelations(nodeItem);
-    });
-
-    graph.on('edge:click', e => {
-      const edgeItem = e.item;
-      const model = edgeItem.getModel();
-      showEdgeDetails(model);
-    });
-
-    graph.on('canvas:click', () => {
-      clearHighlight();
-      document.getElementById('detailPanel').style.display = 'none';
-    });
-
-    function highlightRelations(nodeItem) {
-      clearHighlight();
-      graph.getNodes().forEach(n => {
-        graph.updateItem(n, { style: { opacity: 0.2 } });
-      });
-      graph.getEdges().forEach(e => {
-        graph.updateItem(e, { style: { opacity: 0.1 } });
-      });
-
-      graph.updateItem(nodeItem, { style: { opacity: 1, lineWidth: 3 } });
-
-      const edges = nodeItem.getEdges();
-      edges.forEach(edge => {
-        graph.updateItem(edge, { style: { opacity: 1, lineWidth: 3 } });
-        const source = edge.getSource();
-        const target = edge.getTarget();
-        graph.updateItem(source, { style: { opacity: 1 } });
-        graph.updateItem(target, { style: { opacity: 1 } });
-      });
-    }
-
-    function clearHighlight() {
-      graph.getNodes().forEach(n => {
-        graph.updateItem(n, { style: { opacity: 1, lineWidth: 2 } });
-      });
-      graph.getEdges().forEach(e => {
-        const m = e.getModel();
-        graph.updateItem(e, {
-          style: { opacity: 1, lineWidth: m.edgeType === 'listen' ? 1.5 : Math.min(2 + Math.log2(m.connCount || 1), 6) }
+        [200, 450, 750].forEach(delay => {
+          setTimeout(() => {
+            refitView();
+          }, delay);
         });
+      } else if (structureChanged) {
+        setTimeout(() => {
+          refitView();
+        }, 300);
+      }
+    }
+
+    function refitView() {
+      graph.fitView(250, 0.15);
+    }
+
+    // ===================== 节点标签与 DOM Overlay =====================
+
+    const labelsLayer = document.getElementById('labels');
+    let labelEls = [];
+    let labelUpdatePending = false;
+
+    function syncLabels() {
+      labelsLayer.textContent = '';
+      labelEls = nodes.map(node => {
+        const el = document.createElement('div');
+        el.className = 'node-label' + (node.is_container ? ' container-badge' : '');
+        el.textContent = node.label;
+        el.style.color = node.color;
+        labelsLayer.appendChild(el);
+        return el;
+      });
+      requestLabelUpdate();
+    }
+
+    function requestLabelUpdate() {
+      if (labelUpdatePending) return;
+      labelUpdatePending = true;
+      requestAnimationFrame(() => {
+        labelUpdatePending = false;
+        updateLabels();
       });
     }
 
-    function showNodeDetails(model, nodeItem) {
+    function updateLabels() {
+      if (!graph.isReady) return;
+      let tracked;
+      try {
+        tracked = graph.getTrackedPointPositionsMap();
+      } catch (err) {
+        return;
+      }
+      const viewWidth = mountNode.clientWidth;
+      const viewHeight = mountNode.clientHeight;
+
+      for (let i = 0; i < labelEls.length; i++) {
+        const el = labelEls[i];
+        const pos = tracked.get(i);
+        if (!pos) {
+          el.style.display = 'none';
+          continue;
+        }
+        const screen = graph.spaceToScreenPosition(pos);
+        const sx = screen[0];
+        const sy = screen[1];
+        if (sx < -120 || sx > viewWidth + 120 || sy < -50 || sy > viewHeight + 50) {
+          el.style.display = 'none';
+          continue;
+        }
+        const pointSize = graph.getPointRadiusByIndex(i) || 0;
+        const screenRadius = graph.spaceToScreenRadius(pointSize / 2);
+        el.style.display = '';
+        el.style.transform = 'translate(-50%, 0) translate(' + sx.toFixed(1) + 'px,' + (sy + screenRadius + 4).toFixed(1) + 'px)';
+      }
+    }
+
+    // ===================== 节点交互与悬浮提示 =====================
+
+    const tooltipEl = document.getElementById('hoverTooltip');
+
+    function showPointTooltip(index, event) {
+      const node = nodes[index];
+      if (!node) return;
+
+      const visual = nodeVisualConfig[node.nodeType] || nodeVisualConfig.service;
+      let html = '<div class="tooltip-title" style="color:' + node.color + ';">' +
+        '<span>' + (node.is_container ? '🐳 ' : '') + escapeHTML(node.label) + '</span>' +
+        '</div>';
+      html += '<div class="tooltip-row"><span>类型:</span><span class="tooltip-val">' + escapeHTML(visual.title) + '</span></div>';
+      if (node.is_container) {
+        html += '<div class="tooltip-row"><span>环境:</span><span class="tooltip-val" style="color:#38bdf8;">Docker 容器</span></div>';
+      }
+      if (node.process) {
+        html += '<div class="tooltip-row"><span>进程:</span><span class="tooltip-val">' + escapeHTML(node.process) + '</span></div>';
+      }
+      if (node.ip) {
+        html += '<div class="tooltip-row"><span>IP:</span><span class="tooltip-val">' + escapeHTML(node.ip) + '</span></div>';
+      }
+      if (node.port) {
+        html += '<div class="tooltip-row"><span>端口:</span><span class="tooltip-val">' + escapeHTML(node.port) + '</span></div>';
+      }
+      html += '<div class="tooltip-row"><span>活跃连接数:</span><span class="tooltip-val" style="color:#38bdf8; font-weight:bold;">' + node.totalConns + ' 条</span></div>';
+
+      tooltipEl.innerHTML = html;
+      tooltipEl.style.display = 'block';
+      positionTooltip(event);
+    }
+
+    function showLinkTooltip(linkIndex, event) {
+      const edge = edges[linkIndex];
+      if (!edge) return;
+
+      let html = '<div class="tooltip-title" style="color:' + edge.color + ';">' +
+        '<span>' + escapeHTML(edge.proto || 'TCP') + ' 流量链路</span>' +
+        '</div>';
+      html += '<div class="tooltip-row"><span>源节点:</span><span class="tooltip-val">' + escapeHTML(edge.source) + '</span></div>';
+      html += '<div class="tooltip-row"><span>目标节点:</span><span class="tooltip-val">' + escapeHTML(edge.target) + '</span></div>';
+      html += '<div class="tooltip-row"><span>连接总数:</span><span class="tooltip-val" style="color:#38bdf8; font-weight:bold;">' + (edge.connCount || 1) + ' 条</span></div>';
+
+      tooltipEl.innerHTML = html;
+      tooltipEl.style.display = 'block';
+      positionTooltip(event);
+    }
+
+    function positionTooltip(event) {
+      if (!event) return;
+      const mouseX = event.clientX;
+      const mouseY = event.clientY;
+      const offset = 14;
+      tooltipEl.style.left = (mouseX + offset) + 'px';
+      tooltipEl.style.top = (mouseY + offset) + 'px';
+    }
+
+    function hideTooltip() {
+      tooltipEl.style.display = 'none';
+    }
+
+    // ===================== 选中高亮与详情面板 =====================
+
+    function selectNode(index) {
+      const node = nodes[index];
+      if (!node) return;
+
+      const linkIndices = [];
+      const neighborSet = new Set();
+      edges.forEach((edge, i) => {
+        if (edge.source === node.id) {
+          linkIndices.push(i);
+          neighborSet.add(nodeIndexById.get(edge.target));
+        } else if (edge.target === node.id) {
+          linkIndices.push(i);
+          neighborSet.add(nodeIndexById.get(edge.source));
+        }
+      });
+      neighborSet.delete(index);
+
+      graph.setConfigPartial({
+        highlightedPointIndices: [index].concat([...neighborSet]),
+        highlightedLinkIndices: linkIndices
+      });
+
+      labelEls.forEach((el, i) => {
+        el.style.opacity = (i === index || neighborSet.has(i)) ? '1' : '0.12';
+      });
+
+      showNodeDetails(index);
+    }
+
+    function clearSelection(keepPanel) {
+      graph.setConfigPartial({
+        highlightedPointIndices: undefined,
+        highlightedLinkIndices: undefined
+      });
+      labelEls.forEach(el => {
+        el.style.opacity = '1';
+      });
+      if (!keepPanel) {
+        document.getElementById('detailPanel').style.display = 'none';
+      }
+    }
+
+    function showNodeDetails(index) {
+      const node = nodes[index];
+      if (!node) return;
+
       const panel = document.getElementById('detailPanel');
       const title = document.getElementById('detailTitle');
       const content = document.getElementById('detailContent');
 
-      let typeLabel = escapeHTML(model.nodeType);
-      if (model.nodeType === 'service') typeLabel = '本机服务进程 (Local Service)';
-      else if (model.nodeType === 'local_client') typeLabel = '本机客户端进程 (Local Client)';
-      else if (model.nodeType === 'client') typeLabel = '外部入站客户端 (Inbound Client)';
-      else if (model.nodeType === 'outbound') typeLabel = '外部出站目标 (Outbound Target)';
+      let typeLabel = escapeHTML(node.nodeType);
+      if (node.nodeType === 'service') typeLabel = '本机服务进程 (Local Service)';
+      else if (node.nodeType === 'local_client') typeLabel = '本机客户端进程 (Local Client)';
+      else if (node.nodeType === 'client') typeLabel = '外部入站客户端 (Inbound Client)';
+      else if (node.nodeType === 'outbound') typeLabel = '外部出站目标 (Outbound Target)';
 
-      title.innerText = '节点详情: ' + (model.label ? model.label.replace('\n', ' ') : model.id);
-      let html = '<div style="font-size:12px; margin-bottom:8px;"><span style="color:#94a3b8;">类型:</span> ' + typeLabel + '</div>';
-      if (model.is_container) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#38bdf8;">环境:</span> 🐳 容器实例 (Container)</div>';
-      if (model.ip) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#94a3b8;">IP 地址:</span> ' + escapeHTML(model.ip) + '</div>';
-      if (model.port) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#94a3b8;">端口:</span> ' + escapeHTML(model.port) + '</div>';
-      if (model.process) html += '<div style="font-size:12px; margin-bottom:6px;"><span style="color:#94a3b8;">进程:</span> ' + escapeHTML(model.process) + '</div>';
+      title.innerText = '节点详情: ' + (node.label ? node.label.replace('\n', ' ') : node.id);
+      let html = '<div style="font-size:12px; margin-bottom:8px; color:#a1a1aa;"><span>类型:</span> <span style="color:#fafafa; font-weight:500;">' + typeLabel + '</span></div>';
+      if (node.is_container) html += '<div style="font-size:12px; margin-bottom:6px; color:#a1a1aa;"><span>环境:</span> <span style="color:#38bdf8; font-weight:500;">🐳 容器实例 (Container)</span></div>';
+      if (node.ip) html += '<div style="font-size:12px; margin-bottom:6px; color:#a1a1aa;"><span>IP 地址:</span> <span style="color:#fafafa; font-family:monospace;">' + escapeHTML(node.ip) + '</span></div>';
+      if (node.port) html += '<div style="font-size:12px; margin-bottom:6px; color:#a1a1aa;"><span>端口:</span> <span style="color:#fafafa; font-family:monospace;">' + escapeHTML(node.port) + '</span></div>';
+      if (node.process) html += '<div style="font-size:12px; margin-bottom:6px; color:#a1a1aa;"><span>进程:</span> <span style="color:#fafafa; font-family:monospace;">' + escapeHTML(node.process) + '</span></div>';
 
-      // 汇总当前节点所有关联边的对端节点连接数与 TCP 状态统计
-      const edges = nodeItem ? nodeItem.getEdges() : [];
+      const related = edges.filter(e => e.source === node.id || e.target === node.id);
       const allDetails = [];
       const tcpStates = {};
       const peerMap = {};
       let tcpCount = 0;
       let udpCount = 0;
 
-      edges.forEach(edge => {
-        const m = edge.getModel();
-        const count = m.connCount || (m.details ? m.details.length : 1);
-        const peerNode = edge.getSource() === nodeItem ? edge.getTarget() : edge.getSource();
-        const peerModel = peerNode.getModel();
-        const peerId = peerModel.id;
+      related.forEach(edge => {
+        const count = edge.connCount || (edge.details ? edge.details.length : 1);
+        const peerId = edge.source === node.id ? edge.target : edge.source;
+        const peerIndex = nodeIndexById.get(peerId);
+        const peerNode = peerIndex != null ? nodes[peerIndex] : null;
 
         if (!peerMap[peerId]) {
           peerMap[peerId] = {
             id: peerId,
-            label: peerModel.label ? peerModel.label.replace('\n', ' ') : peerId,
-            nodeType: peerModel.nodeType,
-            is_container: peerModel.is_container,
+            label: peerNode && peerNode.label ? peerNode.label.replace('\n', ' ') : peerId,
+            nodeType: peerNode ? peerNode.nodeType : '',
+            is_container: peerNode ? peerNode.is_container : false,
             count: 0
           };
         }
         peerMap[peerId].count += count;
 
-        if (m.details && m.details.length > 0) {
-          m.details.forEach(d => {
+        if (edge.details && edge.details.length > 0) {
+          edge.details.forEach(d => {
             allDetails.push(d);
-            const proto = (d.proto || m.proto || '').toLowerCase();
+            const proto = (d.proto || edge.proto || '').toLowerCase();
             if (proto.startsWith('tcp')) {
               tcpCount++;
               const st = d.state || 'UNKNOWN';
@@ -828,67 +1243,66 @@
       });
 
       if (allDetails.length > 0) {
-        html += '<div style="font-size:12px; margin-top:8px; margin-bottom:8px;"><span style="color:#94a3b8;">关联连接总数:</span> <b style="color:#38bdf8;">' + allDetails.length + '</b> 条';
-        if (tcpCount > 0) html += ' <span style="color:#64748b;">(TCP: ' + tcpCount + (udpCount > 0 ? ', UDP: ' + udpCount : '') + ')</span>';
+        html += '<div style="font-size:12px; margin-top:8px; margin-bottom:8px;"><span style="color:#a1a1aa;">关联连接总数:</span> <b style="color:#38bdf8;">' + allDetails.length + '</b> 条';
+        if (tcpCount > 0) html += ' <span style="color:#71717a;">(TCP: ' + tcpCount + (udpCount > 0 ? ', UDP: ' + udpCount : '') + ')</span>';
         html += '</div>';
 
         if (tcpCount > 0) {
-          html += '<div style="margin-bottom:10px;"><div style="font-size:11px; color:#94a3b8; margin-bottom:5px;">TCP 状态分布:</div><div style="display:flex; flex-wrap:wrap; gap:6px;">';
+          html += '<div style="margin-bottom:10px;"><div style="font-size:11px; color:#a1a1aa; margin-bottom:5px;">TCP 状态分布:</div><div style="display:flex; flex-wrap:wrap; gap:6px;">';
           for (const [st, cnt] of Object.entries(tcpStates)) {
-            let badgeStyle = 'background: #1e293b; color: #94a3b8; border: 1px solid #334155;';
+            let badgeStyle = 'background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46;';
             if (st === 'ESTABLISHED' || st === 'ESTAB') {
-              badgeStyle = 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #059669;';
+              badgeStyle = 'background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);';
             } else if (st === 'TIME_WAIT' || st === 'TIME-WAIT') {
-              badgeStyle = 'background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid #d97706;';
+              badgeStyle = 'background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);';
             } else if (st === 'CLOSE_WAIT' || st === 'CLOSE-WAIT') {
-              badgeStyle = 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #dc2626;';
+              badgeStyle = 'background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);';
             } else if (st.startsWith('SYN')) {
-              badgeStyle = 'background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid #2563eb;';
+              badgeStyle = 'background: rgba(59, 130, 246, 0.12); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);';
             }
             html += '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:4px; font-size:11px; font-family:monospace; ' + badgeStyle + '">' +
-              '<span>' + escapeHTML(st) + '</span><b style="font-weight:bold;">' + escapeHTML(cnt) + '</b></span>';
+              '<span>' + escapeHTML(st) + '</span><b style="font-weight:600;">' + escapeHTML(cnt) + '</b></span>';
           }
           html += '</div></div>';
         }
 
-        // 渲染连接数 Top 10 对端节点列表
         const topPeers = Object.values(peerMap).sort((a, b) => b.count - a.count).slice(0, 10);
         if (topPeers.length > 0) {
-          html += '<h4 style="font-size:12px; color:#38bdf8; margin-top:12px; margin-bottom:6px;">连接数 Top 10 对端节点:</h4>';
+          html += '<h4 style="font-size:12px; color:#fafafa; font-weight:600; margin-top:14px; margin-bottom:8px;">连接数 Top 10 对端节点:</h4>';
           html += '<div style="display:flex; flex-direction:column; gap:6px;">';
           topPeers.forEach((peer, idx) => {
             let typeBadge = '';
             if (peer.nodeType === 'client') {
-              typeBadge = '<span style="color:#34d399; font-size:10px; background:rgba(6,78,59,0.5); padding:1px 4px; border-radius:3px;">入站</span>';
+              typeBadge = '<span style="color:#34d399; font-size:10px; background:rgba(6,78,59,0.4); border:1px solid rgba(5,150,105,0.3); padding:1px 5px; border-radius:3px;">入站</span>';
             } else if (peer.nodeType === 'outbound') {
-              typeBadge = '<span style="color:#a78bfa; font-size:10px; background:rgba(76,29,149,0.5); padding:1px 4px; border-radius:3px;">出站</span>';
+              typeBadge = '<span style="color:#a78bfa; font-size:10px; background:rgba(76,29,149,0.4); border:1px solid rgba(139,92,246,0.3); padding:1px 5px; border-radius:3px;">出站</span>';
             } else if (peer.nodeType === 'service') {
-              typeBadge = '<span style="color:#60a5fa; font-size:10px; background:rgba(30,58,138,0.5); padding:1px 4px; border-radius:3px;">服务</span>';
-            } else if (peer.nodeType === 'server') {
-              typeBadge = '<span style="color:#38bdf8; font-size:10px; background:rgba(30,58,138,0.5); padding:1px 4px; border-radius:3px;">本机</span>';
+              typeBadge = '<span style="color:#60a5fa; font-size:10px; background:rgba(30,58,138,0.4); border:1px solid rgba(59,130,246,0.3); padding:1px 5px; border-radius:3px;">服务</span>';
+            } else if (peer.nodeType === 'local_client') {
+              typeBadge = '<span style="color:#fb923c; font-size:10px; background:rgba(124,45,18,0.4); border:1px solid rgba(249,115,22,0.3); padding:1px 5px; border-radius:3px;">进程</span>';
             }
 
             let rankColor = idx === 0 ? '#f59e0b' : (idx === 1 ? '#94a3b8' : (idx === 2 ? '#b45309' : '#64748b'));
             const peerLabel = escapeHTML(peer.label);
 
-            html += '<div style="display:flex; align-items:center; justify-content:space-between; background:#0f172a; border:1px solid #334155; border-radius:4px; padding:6px 8px; font-size:11px;">' +
-              '<div style="display:flex; align-items:center; gap:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:75%;">' +
+            html += '<div style="display:flex; align-items:center; justify-content:space-between; background:rgba(39, 39, 42, 0.4); border:1px solid #27272a; border-radius:6px; padding:6px 10px; font-size:11px;">' +
+              '<div style="display:flex; align-items:center; gap:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:75%;">' +
               '<b style="color:' + rankColor + '; width:18px; font-family:monospace;">#' + (idx + 1) + '</b>' +
               typeBadge +
-              '<span style="font-family:monospace; color:#f8fafc; overflow:hidden; text-overflow:ellipsis;" title="' + peerLabel + '">' + peerLabel + '</span>' +
+              '<span style="font-family:monospace; color:#fafafa; overflow:hidden; text-overflow:ellipsis;" title="' + peerLabel + '">' + peerLabel + '</span>' +
               '</div>' +
-              '<div style="font-weight:bold; color:#38bdf8; font-family:monospace;">' + escapeHTML(peer.count) + ' conns</div>' +
+              '<div style="font-weight:600; color:#38bdf8; font-family:monospace;">' + escapeHTML(peer.count) + ' conns</div>' +
               '</div>';
           });
           html += '</div>';
         }
       }
 
-      if (model.nodeType === 'server' && currentTopo && currentTopo.listening_ports) {
-        html += '<h4 style="font-size:12px; color:#38bdf8; margin-top:12px; margin-bottom:6px;">本地正在监听的服务列表:</h4>';
-        html += '<div style="max-height:160px; overflow-y:auto; font-size:11px; background:#0f172a; padding:8px; border-radius:4px;">';
+      if (currentTopo && currentTopo.listening_ports && node.nodeType === 'service') {
+        html += '<h4 style="font-size:12px; color:#fafafa; font-weight:600; margin-top:14px; margin-bottom:8px;">本地正在监听的服务列表:</h4>';
+        html += '<div style="max-height:160px; overflow-y:auto; font-size:11px; background:rgba(39, 39, 42, 0.3); padding:8px 10px; border-radius:6px; border:1px solid #27272a;">';
         currentTopo.listening_ports.forEach(p => {
-          html += '<div style="padding:2px 0; color:#34d399;">● ' + escapeHTML(p) + '</div>';
+          html += '<div style="padding:3px 0; color:#34d399; font-family:monospace;">● ' + escapeHTML(p) + '</div>';
         });
         html += '</div>';
       }
@@ -897,21 +1311,24 @@
       panel.style.display = 'block';
     }
 
-    function showEdgeDetails(model) {
+    function showEdgeDetails(linkIndex) {
+      const edge = edges[linkIndex];
+      if (!edge) return;
+
       const panel = document.getElementById('detailPanel');
       const title = document.getElementById('detailTitle');
       const content = document.getElementById('detailContent');
 
-      title.innerText = '连接 5 元组明细 (' + (model.connCount || 1) + ' 条)';
-      let html = '<div style="font-size:12px; margin-bottom:8px;">' +
-        '<span style="color:#94a3b8;">类型:</span> ' + escapeHTML(model.edgeType) +
-        ' | <span style="color:#94a3b8;">描述:</span> ' + escapeHTML(model.label || '-') + '</div>';
+      title.innerText = '连接 5 元组明细 (' + (edge.connCount || 1) + ' 条)';
+      let html = '<div style="font-size:12px; margin-bottom:10px; color:#a1a1aa;">' +
+        '类型: <span style="color:#fafafa; font-weight:500;">' + escapeHTML(edge.edgeType) + '</span>' +
+        ' &middot; 协议: <span style="color:#fafafa; font-weight:500;">' + escapeHTML(edge.proto || 'TCP') + '</span></div>';
 
-      if (model.details && model.details.length > 0) {
+      if (edge.details && edge.details.length > 0) {
         html += '<table class="tuple-table">' +
           '<thead><tr><th>协议</th><th>本地 (Local)</th><th>远端 (Remote)</th><th>状态</th><th>进程/PID</th></tr></thead>' +
           '<tbody>';
-        model.details.forEach(d => {
+        edge.details.forEach(d => {
           let proc = d.process ? d.process : '-';
           if (d.pid) proc += ' (' + d.pid + ')';
           html += '<tr>' +
@@ -929,31 +1346,125 @@
       panel.style.display = 'block';
     }
 
+    // ===================== 搜索与过滤 =====================
+
+    function onSearchInput(query) {
+      const clearBtn = document.getElementById('searchClear');
+      const q = (query || '').trim().toLowerCase();
+      clearBtn.style.display = q ? 'block' : 'none';
+
+      if (!q) {
+        clearSelection();
+        return;
+      }
+
+      const matchIndices = [];
+      nodes.forEach((n, idx) => {
+        const match = (n.label && n.label.toLowerCase().includes(q)) ||
+          (n.ip && n.ip.toLowerCase().includes(q)) ||
+          (n.port && String(n.port).includes(q)) ||
+          (n.process && n.process.toLowerCase().includes(q));
+        if (match) matchIndices.push(idx);
+      });
+
+      if (matchIndices.length > 0) {
+        graph.setConfigPartial({
+          highlightedPointIndices: matchIndices,
+          highlightedLinkIndices: []
+        });
+        labelEls.forEach((el, idx) => {
+          el.style.opacity = matchIndices.includes(idx) ? '1' : '0.12';
+        });
+      } else {
+        clearSelection();
+      }
+    }
+
+    function focusFirstSearchResult() {
+      const query = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+      if (!query) return;
+      const matchIndex = nodes.findIndex(n =>
+        (n.label && n.label.toLowerCase().includes(query)) ||
+        (n.ip && n.ip.toLowerCase().includes(query)) ||
+        (n.port && String(n.port).includes(query)) ||
+        (n.process && n.process.toLowerCase().includes(query))
+      );
+      if (matchIndex >= 0) {
+        selectNode(matchIndex);
+        graph.zoomToPointByIndex(matchIndex, 0, 2.5);
+      }
+    }
+
+    function clearSearch() {
+      const input = document.getElementById('searchInput');
+      input.value = '';
+      onSearchInput('');
+      input.focus();
+    }
+
+    const visibleTypes = {
+      client: true,
+      service: true,
+      local_client: true,
+      outbound: true
+    };
+
+    function toggleLegendType(type) {
+      if (visibleTypes.hasOwnProperty(type)) {
+        visibleTypes[type] = !visibleTypes[type];
+        updateLegendUI();
+        onFilterChange();
+      }
+    }
+
+    function updateLegendUI() {
+      for (const [type, isVisible] of Object.entries(visibleTypes)) {
+        const el = document.getElementById('legendItem_' + type);
+        if (el) {
+          if (isVisible) {
+            el.classList.remove('disabled');
+          } else {
+            el.classList.add('disabled');
+          }
+        }
+      }
+    }
+
+    function updateLegendCounts() {
+      const counts = { client: 0, local_client: 0, service: 0, outbound: 0 };
+      nodes.forEach(n => {
+        if (counts.hasOwnProperty(n.nodeType)) counts[n.nodeType]++;
+      });
+
+      const elInbound = document.getElementById('legendInbound');
+      const elLocalClient = document.getElementById('legendLocalClient');
+      const elService = document.getElementById('legendService');
+      const elOutbound = document.getElementById('legendOutbound');
+
+      if (elInbound) elInbound.innerText = '外部入站 (' + counts.client + ')';
+      if (elLocalClient) elLocalClient.innerText = '本机进程 (' + counts.local_client + ')';
+      if (elService) elService.innerText = '本机服务 (' + counts.service + ')';
+      if (elOutbound) elOutbound.innerText = '外部出站 (' + counts.outbound + ')';
+      updateLegendUI();
+    }
+
     function onFilterChange() {
       if (!currentTopo) return;
-      const showLocal = document.getElementById('chkLocal').checked;
-      const showInbound = document.getElementById('chkInbound').checked;
-      const showOutbound = document.getElementById('chkOutbound').checked;
-      const showTCP = document.getElementById('chkTCP').checked;
-      const showUDP = document.getElementById('chkUDP').checked;
+      const showService = visibleTypes.service;
+      const showInbound = visibleTypes.client;
+      const showLocalClient = visibleTypes.local_client;
+      const showOutbound = visibleTypes.outbound;
 
       const filtered = JSON.parse(JSON.stringify(currentTopo));
-      const validNodeIDs = new Set(['node_server']);
+      const validNodeIDs = new Set();
 
       filtered.edges = (filtered.edges || []).filter(e => {
-        const isTCP = (e.proto || '').toLowerCase().startsWith('tcp');
-        const isUDP = (e.proto || '').toLowerCase().startsWith('udp');
-
-        if (!showTCP && isTCP) return false;
-        if (!showUDP && isUDP) return false;
-
-        // 根据多选显示范围过滤
         if (e.edgeType === 'inbound') {
-          if (!showInbound) return false;
+          if (!showInbound || !showService) return false;
         } else if (e.edgeType === 'outbound') {
-          if (!showOutbound) return false;
-        } else if (e.edgeType === 'internal' || e.edgeType === 'listen') {
-          if (!showLocal) return false;
+          if (!showLocalClient || !showOutbound) return false;
+        } else if (e.edgeType === 'internal') {
+          if (!showLocalClient || !showService) return false;
         }
 
         validNodeIDs.add(e.source);
@@ -962,14 +1473,63 @@
       });
 
       filtered.nodes = (filtered.nodes || []).filter(n => {
-        if (n.id === 'node_server') return true;
-        if (n.nodeType === 'service' && showLocal) return true;
-        return validNodeIDs.has(n.id);
+        if (n.nodeType === 'service' && !showService) return false;
+        if (n.nodeType === 'client' && !showInbound) return false;
+        if (n.nodeType === 'outbound' && !showOutbound) return false;
+        if (n.nodeType === 'local_client' && !showLocalClient) return false;
+
+        return validNodeIDs.has(n.id) || (n.nodeType === 'service' && showService);
       });
 
-      const updated = processG6Data(filtered);
-      graph.changeData(updated);
+      renderGraph(filtered);
     }
+
+    // ===================== 宿主诊断弹窗 =====================
+
+    function showHostModal() {
+      const modal = document.getElementById('hostModal');
+      const overlay = document.getElementById('modalOverlay');
+      const content = document.getElementById('hostModalContent');
+
+      let html = '<div style="font-size:12px; margin-bottom:14px; color:#a1a1aa;">' +
+        '<div><span>主机名:</span> <b style="color:#fafafa; font-weight:600;">{{.HostName}}</b></div>' +
+        '<div style="margin-top:4px;"><span>IP 地址:</span> <span style="font-family:monospace; color:#fafafa;">{{.HostIP}}</span></div>' +
+        (currentTopo ? '<div style="margin-top:4px;"><span>数据采集时间:</span> <span style="color:#71717a;">' + escapeHTML(currentTopo.collected_at) + '</span></div>' : '') +
+        '</div>';
+
+      if (currentTopo && currentTopo.summary) {
+        const s = currentTopo.summary;
+        html += '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:16px;">' +
+          '<div style="background:rgba(39, 39, 42, 0.4); border:1px solid #27272a; padding:10px 8px; border-radius:6px; text-align:center;"><div style="color:#a1a1aa; font-size:11px; margin-bottom:2px;">活跃连接</div><div style="font-size:16px; font-weight:600; color:#fafafa;">' + (s.total_conns || 0) + '</div></div>' +
+          '<div style="background:rgba(39, 39, 42, 0.4); border:1px solid #27272a; padding:10px 8px; border-radius:6px; text-align:center;"><div style="color:#a1a1aa; font-size:11px; margin-bottom:2px;">TCP / UDP</div><div style="font-size:16px; font-weight:600; color:#10b981;">' + (s.tcp_count || 0) + ' / ' + (s.udp_count || 0) + '</div></div>' +
+          '<div style="background:rgba(39, 39, 42, 0.4); border:1px solid #27272a; padding:10px 8px; border-radius:6px; text-align:center;"><div style="color:#a1a1aa; font-size:11px; margin-bottom:2px;">入站 / 出站</div><div style="font-size:16px; font-weight:600; color:#c084fc;">' + (s.inbound_clients || 0) + ' / ' + (s.outbound_count || 0) + '</div></div>' +
+          '</div>';
+      }
+
+      if (currentTopo && currentTopo.listening_ports && currentTopo.listening_ports.length > 0) {
+        html += '<h4 style="font-size:12px; color:#fafafa; font-weight:600; margin-bottom:8px;">本地监听服务列表 (' + currentTopo.listening_ports.length + ' 个):</h4>';
+        html += '<div style="max-height:240px; overflow-y:auto; font-size:11px; background:rgba(39, 39, 42, 0.3); padding:8px 10px; border-radius:6px; border:1px solid #27272a;">';
+        currentTopo.listening_ports.forEach(p => {
+          const isContainer = p.includes('🐳');
+          html += '<div style="padding:4px 0; border-bottom:1px solid #27272a; display:flex; align-items:center; justify-content:space-between;">' +
+            '<span style="font-family:monospace; color:' + (isContainer ? '#38bdf8' : '#34d399') + ';">● ' + escapeHTML(p) + '</span>' +
+            (isContainer ? '<span style="font-size:10px; background:rgba(2,132,199,0.15); color:#38bdf8; border:1px solid rgba(2,132,199,0.3); padding:1px 5px; border-radius:3px;">容器</span>' : '') +
+            '</div>';
+        });
+        html += '</div>';
+      }
+
+      content.innerHTML = html;
+      overlay.style.display = 'block';
+      modal.style.display = 'block';
+    }
+
+    function closeHostModal() {
+      document.getElementById('hostModal').style.display = 'none';
+      document.getElementById('modalOverlay').style.display = 'none';
+    }
+
+    // ===================== API 数据加载与定时器 =====================
 
     async function fetchTopology(force = false) {
       const statusDot = document.getElementById('statusDot');
@@ -1003,23 +1563,11 @@
         statusDot.className = 'status-dot error';
         statusText.innerText = '请求失败: ' + err.message;
       }
-    }
-
-    function syncIntervalControl(interval) {
-      const select = document.getElementById('intervalSelect');
-      const value = String(interval);
-      if (![...select.options].some(option => option.value === value)) {
-        select.add(new Option(interval + ' 秒', value));
-      }
-      select.value = value;
-    }
-
-    async function changeInterval() {
-      const select = document.getElementById('intervalSelect');
+    async function changeInterval(newSec) {
+      const requestedIntervalSec = parseInt(newSec, 10);
+      if (isNaN(requestedIntervalSec) || requestedIntervalSec < 2) return;
       const previousIntervalSec = currentIntervalSec;
-      const requestedIntervalSec = parseInt(select.value, 10);
-      const statusText = document.getElementById('statusText');
-      statusText.innerText = '正在更新刷新周期...';
+      if (statusText) statusText.innerText = '正在更新刷新周期...';
 
       try {
         const response = await fetch('/api/interval', {
@@ -1032,13 +1580,11 @@
         }
         const result = await response.json();
         currentIntervalSec = result.interval;
-        syncIntervalControl(currentIntervalSec);
         setupTimer();
-        statusText.innerText = currentIntervalSec > 0 ? (currentIntervalSec + 's 自动刷新') : '';
+        if (statusText) statusText.innerText = currentIntervalSec > 0 ? (currentIntervalSec + 's 自动刷新') : '';
       } catch (err) {
         currentIntervalSec = previousIntervalSec;
-        syncIntervalControl(currentIntervalSec);
-        statusText.innerText = '更新失败: ' + err.message;
+        if (statusText) statusText.innerText = '更新失败: ' + err.message;
       }
     }
 
@@ -1054,15 +1600,13 @@
       }
     }
 
+    window.addEventListener('resize', () => {
+      requestLabelUpdate();
+    });
+
     window.onload = () => {
-      syncIntervalControl(currentIntervalSec);
       fetchTopology(false);
       setupTimer();
-    };
-
-    window.onresize = () => {
-      if (!graph || graph.get('destroyed')) return;
-      graph.changeSize(container.scrollWidth, container.scrollHeight);
     };
   </script>
 </body>

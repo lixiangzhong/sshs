@@ -47,7 +47,7 @@ description: 使用本地最新版 sshs 执行运维排障、主机巡检、命�
 6. SOCKS5 代理：`sshs socks5 -l <local-addr> [keyword...]`
 7. 批量执行：`sshs run -f <file>`（YAML 或 `.sh`）
 8. 批量巡检：`sshs inspect [keyword...]`
-9. 网络拓扑关系图：`sshs graph [keyword...]`（别名 `g`、`topo`，基于 AntV G6 可视化 TCP/UDP 拓扑）
+9. 网络拓扑关系图：`sshs graph [keyword...]`（别名 `g`、`topo`，基于 cosmos.gl WebGL 可视化 TCP/UDP 拓扑）
 
 ## 常用命令
 
@@ -79,8 +79,9 @@ sshs inspect --timeout 5s --concurrency 20 prod
 **网络连接关系拓扑图（本地 Web 动态服务）：**
 
 ```bash
-sshs graph prod-1                         # 启动本地 Web 服务并自动打开浏览器（别名: sshs g 或 sshs topo）
-sshs graph -i 20s prod-1                  # 可选：指定自动刷新间隔为 20s（也可在网页界面直接切换）
+sshs graph prod-1                         # 启动本地 Web 服务并自动打开浏览器（默认 30s 自动刷新，别名: sshs g 或 sshs topo）
+sshs graph -i 10s prod-1                  # 可选：指定自动刷新间隔（默认 30s）
+sshs graph -a 5 prod-1                    # 可选：指定对端连接聚合阈值（默认 3）
 sshs graph -l 127.0.0.1:8080 prod-1       # 可选：指定本地服务监听端口（默认随机分配）
 sshs graph --json prod-1                  # 可选：只采集一次并输出拓扑 JSON（不启动 Web 服务），供脚本/管道使用
 ```

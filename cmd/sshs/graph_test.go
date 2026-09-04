@@ -28,9 +28,12 @@ func TestGraphCollectScriptShellSyntax(t *testing.T) {
 	}
 }
 
-func TestGraphDefaultsToTenSecondRefresh(t *testing.T) {
-	if graphIntervalDefault != 10*time.Second {
-		t.Fatalf("graphIntervalDefault = %v, want 10s", graphIntervalDefault)
+func TestGraphDefaultsToThirtySecondRefresh(t *testing.T) {
+	if graphIntervalDefault != 30*time.Second {
+		t.Fatalf("graphIntervalDefault = %v, want 30s", graphIntervalDefault)
+	}
+	if graphAggregateDefault != 3 {
+		t.Fatalf("graphAggregateDefault = %v, want 3", graphAggregateDefault)
 	}
 }
 
@@ -284,15 +287,15 @@ udp UNCONN 0 0 0.0.0.0:53 0.0.0.0:* users:(("named",pid=400,fd=8))
 	}
 
 	// 检查动态 HTML 模板渲染
-	html := renderDynamicG6HTML(topo.HostName, topo.HostIP, 10)
-	if !strings.Contains(html, "app-server-01") || !strings.Contains(html, "antv/g6") || !strings.Contains(html, "/api/topology") {
+	html := renderGraphPageHTML(topo.HostName, topo.HostIP, 10)
+	if !strings.Contains(html, "app-server-01") || !strings.Contains(html, "/cosmos.min.js") || !strings.Contains(html, "/api/topology") {
 		t.Errorf("rendered HTML missing expected keywords or api endpoint")
 	}
-	if !strings.Contains(html, "escapeHTML") || !strings.Contains(html, "/api/interval") || !strings.Contains(html, "combo_local_clients") || !strings.Contains(html, "toggleLayout") || !strings.Contains(html, "nodeClusterBy") {
-		t.Errorf("rendered HTML missing safe detail rendering, interval update endpoint, combo_local_clients, or toggleLayout/nodeClusterBy")
+	if !strings.Contains(html, "escapeHTML") || !strings.Contains(html, "/api/interval") || !strings.Contains(html, "Cosmos.Graph") || !strings.Contains(html, "simulationCluster") || !strings.Contains(html, "trackPointPositionsByIndices") {
+		t.Errorf("rendered HTML missing safe detail rendering, interval update endpoint, or cosmos.gl integration")
 	}
 	for _, escapedExpression := range []string{
-		"escapeHTML(model.process)",
+		"escapeHTML(node.process)",
 		"escapeHTML(peer.label)",
 		"escapeHTML(p)",
 		"escapeHTML(d.local_raw)",
@@ -526,6 +529,33 @@ func TestGraphIntervalHandlerRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
+func TestGraphHandlerServesEmbeddedCosmosBundle(t *testing.T) {
+	server := newGraphServer(Config{}, graphTimeoutDefault, graphIntervalDefault)
+	handler := newGraphHTTPHandler(server, Config{})
+
+	request := httptest.NewRequest(http.MethodGet, "/cosmos.min.js", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if contentType := response.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "application/javascript") {
+		t.Errorf("Content-Type = %q, want application/javascript", contentType)
+	}
+	body := response.Body.String()
+	if len(body) < 100000 || !strings.Contains(body, "Cosmos") {
+		t.Errorf("embedded cosmos bundle looks truncated or invalid: %d bytes", len(body))
+	}
+
+	methodRequest := httptest.NewRequest(http.MethodPost, "/cosmos.min.js", nil)
+	methodResponse := httptest.NewRecorder()
+	handler.ServeHTTP(methodResponse, methodRequest)
+	if methodResponse.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST status = %d, want %d", methodResponse.Code, http.StatusMethodNotAllowed)
+	}
+}
+
 func TestGraphCommandHasJSONFlag(t *testing.T) {
 	app := newApp()
 	var graphCmd *cli.Command
@@ -551,6 +581,31 @@ func TestGraphCommandHasJSONFlag(t *testing.T) {
 	}
 	if jsonFlag.Value != false {
 		t.Errorf("--json default = %v, want false", jsonFlag.Value)
+	}
+
+	var intervalFlag *cli.DurationFlag
+	var aggregateFlag *cli.IntFlag
+	for _, flag := range graphCmd.Flags {
+		if df, ok := flag.(*cli.DurationFlag); ok && df.Name == "interval" {
+			intervalFlag = df
+		}
+		if iflag, ok := flag.(*cli.IntFlag); ok && iflag.Name == "aggregate" {
+			aggregateFlag = iflag
+		}
+	}
+
+	if intervalFlag == nil {
+		t.Fatalf("graph command missing --interval flag")
+	}
+	if intervalFlag.Value != 30*time.Second {
+		t.Errorf("--interval default = %v, want 30s", intervalFlag.Value)
+	}
+
+	if aggregateFlag == nil {
+		t.Fatalf("graph command missing --aggregate flag")
+	}
+	if aggregateFlag.Value != 3 {
+		t.Errorf("--aggregate default = %v, want 3", aggregateFlag.Value)
 	}
 }
 

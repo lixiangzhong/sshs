@@ -8,7 +8,7 @@ import (
 )
 
 // version 默认值供本地直接编译使用；发版时由 GoReleaser 通过 -ldflags 注入 tag 版本号
-var version = "1.24.0"
+var version = "1.25.0"
 
 func main() {
 	log.SetFlags(0)
@@ -68,13 +68,19 @@ func newApp() *cli.App {
 				Name:      "graph",
 				Aliases:   []string{"g", "topo"},
 				Usage:     "visualize host tcp/udp network topology via local web server",
-				UsageText: "sshs graph [-i <dur>] [-l <addr>] [host keywords...] [--json]",
+				UsageText: "sshs graph [-i <dur>] [-a <num>] [-l <addr>] [host keywords...] [--json]",
 				Flags: []cli.Flag{
 					&cli.DurationFlag{
 						Name:    "interval",
 						Aliases: []string{"i"},
-						Usage:   "auto-refresh interval (e.g. 10s, 20s)",
+						Usage:   "auto-refresh interval (e.g. 10s, 30s)",
 						Value:   graphIntervalDefault,
+					},
+					&cli.IntFlag{
+						Name:    "aggregate",
+						Aliases: []string{"a"},
+						Usage:   "connection aggregation threshold",
+						Value:   graphAggregateDefault,
 					},
 					&cli.StringFlag{
 						Name:    "addr",

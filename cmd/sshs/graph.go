@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	graphTimeoutDefault  = 10 * time.Second
-	graphIntervalDefault = 10 * time.Second
-	graphIntervalMinimum = 2 * time.Second
+	graphTimeoutDefault   = 10 * time.Second
+	graphIntervalDefault  = 30 * time.Second
+	graphIntervalMinimum  = 2 * time.Second
+	graphAggregateDefault = 3
 )
 
 // graphCollectScript 在远程主机上执行，采集网络连接、本机IP、容器（Docker/Podman/nerdctl等）映射信息，
@@ -166,12 +167,12 @@ type RawConn struct {
 	Process    string `json:"process,omitempty"`
 	PID        int    `json:"pid,omitempty"`
 	// Container 记录连接采自哪个（些）容器的网络命名空间；宿主视角采集时为空。
-	Container  string `json:"container,omitempty"`
-	LocalRaw   string `json:"local_raw"`
-	RemoteRaw  string `json:"remote_raw"`
+	Container string `json:"container,omitempty"`
+	LocalRaw  string `json:"local_raw"`
+	RemoteRaw string `json:"remote_raw"`
 }
 
-// GraphNode G6 节点
+// GraphNode 拓扑图节点
 type GraphNode struct {
 	ID          string                 `json:"id"`
 	Label       string                 `json:"label"`
@@ -185,7 +186,7 @@ type GraphNode struct {
 	Style       map[string]interface{} `json:"style,omitempty"`
 }
 
-// GraphEdge G6 边
+// GraphEdge 拓扑图边
 type GraphEdge struct {
 	ID        string                 `json:"id"`
 	Source    string                 `json:"source"`
@@ -220,8 +221,9 @@ type TopologyData struct {
 
 // GraphServer 管理动态采集与本地 HTTP 服务
 type GraphServer struct {
-	hostCfg Config
-	timeout time.Duration
+	hostCfg            Config
+	timeout            time.Duration
+	aggregateThreshold int
 
 	collectMu       sync.Mutex
 	mu              sync.RWMutex
@@ -233,13 +235,28 @@ type GraphServer struct {
 }
 
 // newGraphServer 初始化采集状态和刷新周期通知通道。
-func newGraphServer(hostCfg Config, timeout, interval time.Duration) *GraphServer {
-	return &GraphServer{
-		hostCfg:         hostCfg,
-		timeout:         timeout,
-		interval:        interval,
-		intervalChanged: make(chan struct{}, 1),
+func newGraphServer(hostCfg Config, timeout, interval time.Duration, aggregateThreshold ...int) *GraphServer {
+	threshold := graphAggregateDefault
+	if len(aggregateThreshold) > 0 && aggregateThreshold[0] > 0 {
+		threshold = aggregateThreshold[0]
 	}
+	return &GraphServer{
+		hostCfg:            hostCfg,
+		timeout:            timeout,
+		interval:           interval,
+		aggregateThreshold: threshold,
+		intervalChanged:    make(chan struct{}, 1),
+	}
+}
+
+// getAggregateThreshold 返回连接聚合阈值。
+func (s *GraphServer) getAggregateThreshold() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.aggregateThreshold <= 0 {
+		return graphAggregateDefault
+	}
+	return s.aggregateThreshold
 }
 
 // getClientLocked 返回可用 SSH 连接。调用方必须持有 collectMu。
@@ -410,8 +427,19 @@ func newGraphHTTPHandler(server *GraphServer, hostCfg Config) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		htmlStr := renderDynamicG6HTML(hostCfg.Name, hostCfg.Host, int(server.getInterval().Seconds()))
+		htmlStr := renderGraphPageHTML(hostCfg.Name, hostCfg.Host, int(server.getInterval().Seconds()), server.getAggregateThreshold())
 		_, _ = w.Write([]byte(htmlStr))
+	})
+
+	mux.HandleFunc("/cosmos.min.js", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write([]byte(cosmosJS))
 	})
 
 	mux.HandleFunc("/api/topology", func(w http.ResponseWriter, r *http.Request) {
@@ -506,7 +534,15 @@ func GraphAction(c *cli.Context) error {
 		return cli.Exit(err, 1)
 	}
 
-	server := newGraphServer(hostCfg, graphTimeoutDefault, interval)
+	aggregate := graphAggregateDefault
+	if c.IsSet("aggregate") {
+		aggregate = c.Int("aggregate")
+		if aggregate < 1 {
+			return cli.Exit("aggregate threshold must be at least 1", 1)
+		}
+	}
+
+	server := newGraphServer(hostCfg, graphTimeoutDefault, interval, aggregate)
 
 	if !jsonOutput {
 		fmt.Printf("Connecting to %s (%s) to collect network topology...\n", hostCfg.Name, hostCfg.RemoteAddr())
@@ -1566,21 +1602,30 @@ func openBrowser(targetURL string) error {
 	return cmd.Start()
 }
 
-func renderDynamicG6HTML(hostName, hostIP string, defaultIntervalSec int) string {
-	tmpl, err := template.New("dynamic_g6").Parse(dynamicG6Template)
-	if err != nil {
-		return fmt.Sprintf("Template Error: %v", err)
+func renderGraphPageHTML(hostName, hostIP string, defaultIntervalSec int, defaultAggregateThreshold ...int) string {
+	threshold := graphAggregateDefault
+	if len(defaultAggregateThreshold) > 0 && defaultAggregateThreshold[0] > 0 {
+		threshold = defaultAggregateThreshold[0]
 	}
 
 	var sb strings.Builder
 	data := map[string]interface{}{
-		"HostName":           hostName,
-		"HostIP":             hostIP,
-		"DefaultIntervalSec": defaultIntervalSec,
+		"HostName":                  hostName,
+		"HostIP":                    hostIP,
+		"DefaultIntervalSec":        defaultIntervalSec,
+		"DefaultAggregateThreshold": threshold,
 	}
-	_ = tmpl.Execute(&sb, data)
+	_ = graphPageTmpl.Execute(&sb, data)
 	return sb.String()
 }
 
 //go:embed graph.html
-var dynamicG6Template string
+var graphPageTemplate string
+
+var graphPageTmpl = template.Must(template.New("graph_page").Parse(graphPageTemplate))
+
+// cosmosJS 是内嵌的 cosmos.gl (https://cosmos.gl, MIT License, 见 cosmos.LICENSE)
+// UMD 构建，由本地 Web 服务直接吐出，页面渲染不依赖外部 CDN。
+//
+//go:embed cosmos.min.js
+var cosmosJS string

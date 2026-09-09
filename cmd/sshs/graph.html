@@ -1563,6 +1563,8 @@
         statusDot.className = 'status-dot error';
         statusText.innerText = '请求失败: ' + err.message;
       }
+    }
+
     async function changeInterval(newSec) {
       const requestedIntervalSec = parseInt(newSec, 10);
       if (isNaN(requestedIntervalSec) || requestedIntervalSec < 2) return;
@@ -1597,6 +1599,14 @@
         refreshTimer = setInterval(() => {
           fetchTopology(false);
         }, currentIntervalSec * 1000);
+      }
+    }
+
+    // 页面顶部暂无周期下拉控件，该函数用于在周期变化时同步状态显示
+    function syncIntervalControl(intervalSec) {
+      const statusText = document.getElementById('statusText');
+      if (statusText) {
+        statusText.innerText = intervalSec > 0 ? (intervalSec + 's 自动刷新') : '';
       }
     }
 

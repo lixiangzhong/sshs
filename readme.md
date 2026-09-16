@@ -53,13 +53,14 @@ vi ~/.sshs.yaml
   } # 使用跳板机
 ```
 
-> 配置里没写 `password` 的主机（含跳板机）会回退读取环境变量 `SSHS_PASSWORD` 作为密码：
+> 配置里没写 `password` 的主机（含跳板机）会回退读取系统钥匙串中的 `default-password`：
 >
 > ```sh
-> export SSHS_PASSWORD=123456
+> # macOS: 写入系统钥匙串（一次性设置即可，service 为 sshs，account 为 default-password）
+> security add-generic-password -U -s sshs -a default-password -w "YOUR_PASSWORD"
 > ```
 >
-> 配置中写明的 `password` 优先；`SSHS_PASSWORD` 未设置时行为不变。
+> 配置中写明的 `password` 优先；未配置钥匙串默认密码时行为不变。
 
 ### 密码加密与安全防护
 

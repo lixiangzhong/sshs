@@ -27,8 +27,9 @@ const (
 	nonceLength      = 12
 	pbkdf2Rounds     = 100000
 	aesKeyLength     = 32
-	keyringService   = "sshs"
-	keyringMasterKey = "master-key"
+	keyringService         = "sshs"
+	keyringMasterKey       = "master-key"
+	keyringDefaultPassword = "default-password"
 )
 
 var (
@@ -163,6 +164,16 @@ var activeKeyring KeyringProvider = defaultKeyringProvider{}
 // GetKeyringMasterKey 查询系统钥匙串中当前存储的主密码。
 func GetKeyringMasterKey() (string, error) {
 	return activeKeyring.Get(keyringService, keyringMasterKey)
+}
+
+// GetKeyringDefaultPassword 从系统钥匙串静默读取默认回退密码（service: sshs, account: default-password）。
+// 若未在钥匙串中配置，静默返回空字符串，绝不交互提示。
+func GetKeyringDefaultPassword() string {
+	pass, err := activeKeyring.Get(keyringService, keyringDefaultPassword)
+	if err != nil {
+		return ""
+	}
+	return pass
 }
 
 // SetKeyringMasterKey 向系统钥匙串设置或更新主密码。

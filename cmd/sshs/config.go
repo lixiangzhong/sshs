@@ -62,23 +62,23 @@ func (c *Config) Username() string {
 	return c.User
 }
 
-// HasPassword 判断该主机是否配置了密码（支持明文密码、密文密码或环境变量回退）。
+// HasPassword 判断该主机是否配置了密码（支持明文密码、密文密码或系统钥匙串默认密码回退）。
 // 该方法仅做配置存在性探测，绝对不触发解密或终端输入交互。
 func (c *Config) HasPassword() bool {
 	if c.Password != "" {
 		return true
 	}
-	return os.Getenv("SSHS_PASSWORD") != ""
+	return GetKeyringDefaultPassword() != ""
 }
 
 // PasswordValue 返回生效的密码及可能发生的解密错误：
 // 1. 若配置中包含 ENC(v1:...) 密文，则尝试使用 Master Key 解密；若解密失败直接返回错误（快速失败）；
 // 2. 若配置中为普通明文，直接返回；
-// 3. 否则回退环境变量 SSHS_PASSWORD。
+// 3. 否则回退系统钥匙串中的 default-password。
 func (c *Config) PasswordValue() (string, error) {
 	raw := c.Password
 	if raw == "" {
-		return os.Getenv("SSHS_PASSWORD"), nil
+		return GetKeyringDefaultPassword(), nil
 	}
 	if !IsEncrypted(raw) {
 		return raw, nil

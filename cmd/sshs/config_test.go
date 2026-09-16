@@ -17,22 +17,26 @@ func Test_configFileList(t *testing.T) {
 	t.Log(list)
 }
 
-func Test_PasswordValueFallsBackToSSHSPasswordEnv(t *testing.T) {
-	t.Setenv("SSHS_PASSWORD", "")
+func Test_PasswordValueFallsBackToKeyringDefaultPassword(t *testing.T) {
+	mock := &mockKeyring{data: make(map[string]string)}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+
 	c := &Config{Name: "web", Host: "10.0.0.1"}
 	got, err := c.PasswordValue()
 	if err != nil || got != "" {
-		t.Fatalf("PasswordValue() = %q, %v, want empty when env unset", got, err)
+		t.Fatalf("PasswordValue() = %q, %v, want empty when default password not in keyring", got, err)
 	}
 
-	t.Setenv("SSHS_PASSWORD", "env-pass")
+	mock.data["sshs/default-password"] = "keyring-fallback-pass"
 	got, err = c.PasswordValue()
-	if err != nil || got != "env-pass" {
-		t.Fatalf("PasswordValue() = %q, %v, want env fallback", got, err)
+	if err != nil || got != "keyring-fallback-pass" {
+		t.Fatalf("PasswordValue() = %q, %v, want keyring default fallback", got, err)
 	}
 	auth, err := c.AuthMethod()
 	if err != nil || len(auth) != 1 {
-		t.Fatalf("AuthMethod() count = %d, err = %v, want 1 with env fallback", len(auth), err)
+		t.Fatalf("AuthMethod() count = %d, err = %v, want 1 with keyring default", len(auth), err)
 	}
 
 	c.Password = "cfg-pass"
@@ -116,7 +120,11 @@ func Test_loadSortedHosts(t *testing.T) {
 }
 
 func Test_HasPassword(t *testing.T) {
-	t.Setenv("SSHS_PASSWORD", "")
+	mock := &mockKeyring{data: make(map[string]string)}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+
 	c := Config{Name: "web"}
 	if c.HasPassword() {
 		t.Fatal("HasPassword() = true, want false")
@@ -133,9 +141,9 @@ func Test_HasPassword(t *testing.T) {
 	}
 
 	c.Password = ""
-	t.Setenv("SSHS_PASSWORD", "env-pass")
+	mock.data["sshs/default-password"] = "keyring-pass"
 	if !c.HasPassword() {
-		t.Fatal("HasPassword() = false, want true for env fallback")
+		t.Fatal("HasPassword() = false, want true for keyring default fallback")
 	}
 }
 

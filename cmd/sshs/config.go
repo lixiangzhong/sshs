@@ -71,29 +71,27 @@ func (c *Config) HasPassword() bool {
 	return os.Getenv("SSHS_PASSWORD") != ""
 }
 
-// PasswordValue 返回生效的密码：
-// 1. 若配置中包含 ENC(v1:...) 密文，则尝试使用 Master Key 解密；
+// PasswordValue 返回生效的密码及可能发生的解密错误：
+// 1. 若配置中包含 ENC(v1:...) 密文，则尝试使用 Master Key 解密；若解密失败直接返回错误（快速失败）；
 // 2. 若配置中为普通明文，直接返回；
 // 3. 否则回退环境变量 SSHS_PASSWORD。
-func (c *Config) PasswordValue() string {
+func (c *Config) PasswordValue() (string, error) {
 	raw := c.Password
 	if raw == "" {
-		return os.Getenv("SSHS_PASSWORD")
+		return os.Getenv("SSHS_PASSWORD"), nil
 	}
 	if !IsEncrypted(raw) {
-		return raw
+		return raw, nil
 	}
 	masterKey, err := ResolveMasterKey(false)
 	if err != nil {
-		log.Printf("failed to resolve master key: %v", err)
-		return ""
+		return "", fmt.Errorf("failed to resolve master key: %w", err)
 	}
 	plain, err := DecryptPassword(raw, masterKey)
 	if err != nil {
-		log.Printf("failed to decrypt password for host %s: %v", c.Name, err)
-		return ""
+		return "", fmt.Errorf("failed to decrypt password for host %q: %w", c.Name, err)
 	}
-	return plain
+	return plain, nil
 }
 
 func (c *Config) RemotePort() int {
@@ -107,7 +105,7 @@ func (c *Config) RemoteAddr() string {
 	return net.JoinHostPort(c.Host, strconv.Itoa(c.RemotePort()))
 }
 
-func (c *Config) AuthMethod() []ssh.AuthMethod {
+func (c *Config) AuthMethod() ([]ssh.AuthMethod, error) {
 	var auth []ssh.AuthMethod
 	if c.KeyPath != "" {
 		b, err := os.ReadFile(parsePath(c.KeyPath))
@@ -117,10 +115,14 @@ func (c *Config) AuthMethod() []ssh.AuthMethod {
 			auth = append(auth, secureshell.KeyAuth(b, c.Passphrase))
 		}
 	}
-	if password := c.PasswordValue(); password != "" {
+	password, err := c.PasswordValue()
+	if err != nil {
+		return nil, err
+	}
+	if password != "" {
 		auth = append(auth, secureshell.PasswordAuth(password))
 	}
-	return auth
+	return auth, nil
 }
 
 func configFileList(names ...string) []string {

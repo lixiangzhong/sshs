@@ -115,18 +115,27 @@ func filterExactMatch(candidates []Config, keywords ...string) []Config {
 }
 
 // dialThroughJumpers 逐级穿过 jumper 链并连接目标主机，dial 用于指定拨号方式（交互/非交互）。
+// 在发起任何网络拨号前执行凭据校验与解密；若解密失败直接快速失败（Fail-Fast），绝不发出网络请求。
 func dialThroughJumpers(c Config, dial func(secureshell.Dialer, string, string, ...ssh.AuthMethod) (*ssh.Client, error)) (*ssh.Client, error) {
 	jumper := c.Jumper
 	dialer := proxy.FromEnvironment()
 	for jumper != nil {
-		jc, err := dial(dialer, jumper.Username(), jumper.RemoteAddr(), jumper.AuthMethod()...)
+		auth, err := jumper.AuthMethod()
+		if err != nil {
+			return nil, fmt.Errorf("jumper %s auth failed: %w", jumper.Name, err)
+		}
+		jc, err := dial(dialer, jumper.Username(), jumper.RemoteAddr(), auth...)
 		if err != nil {
 			return nil, err
 		}
 		dialer = jc
 		jumper = jumper.Jumper
 	}
-	return dial(dialer, c.Username(), c.RemoteAddr(), c.AuthMethod()...)
+	auth, err := c.AuthMethod()
+	if err != nil {
+		return nil, fmt.Errorf("host %s auth failed: %w", c.Name, err)
+	}
+	return dial(dialer, c.Username(), c.RemoteAddr(), auth...)
 }
 
 func LoadConfig(keyword ...string) ([]Config, error) {

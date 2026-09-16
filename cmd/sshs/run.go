@@ -70,7 +70,12 @@ func RunAction(ctx *cli.Context) error {
 			}
 			fmt.Println("host", host.RemoteAddr())
 			defer fmt.Println(strings.Repeat("↑", 100))
-			c, err := secureshell.Dial(proxy.FromEnvironment(), host.Username(), host.RemoteAddr(), host.AuthMethod()...)
+			auth, err := host.AuthMethod()
+			if err != nil {
+				fmt.Printf("auth error: %v\n", err)
+				return
+			}
+			c, err := secureshell.Dial(proxy.FromEnvironment(), host.Username(), host.RemoteAddr(), auth...)
 			if err != nil {
 				fmt.Println(err)
 				return

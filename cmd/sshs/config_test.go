@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixiangzhong/sshs/pkg/secureshell"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/crypto/ssh"
 )
 
 func Test_configFileList(t *testing.T) {
@@ -18,21 +20,25 @@ func Test_configFileList(t *testing.T) {
 func Test_PasswordValueFallsBackToSSHSPasswordEnv(t *testing.T) {
 	t.Setenv("SSHS_PASSWORD", "")
 	c := &Config{Name: "web", Host: "10.0.0.1"}
-	if got := c.PasswordValue(); got != "" {
-		t.Fatalf("PasswordValue() = %q, want empty when env unset", got)
+	got, err := c.PasswordValue()
+	if err != nil || got != "" {
+		t.Fatalf("PasswordValue() = %q, %v, want empty when env unset", got, err)
 	}
 
 	t.Setenv("SSHS_PASSWORD", "env-pass")
-	if got := c.PasswordValue(); got != "env-pass" {
-		t.Fatalf("PasswordValue() = %q, want env fallback", got)
+	got, err = c.PasswordValue()
+	if err != nil || got != "env-pass" {
+		t.Fatalf("PasswordValue() = %q, %v, want env fallback", got, err)
 	}
-	if got := len(c.AuthMethod()); got != 1 {
-		t.Fatalf("AuthMethod() count = %d, want 1 with env fallback", got)
+	auth, err := c.AuthMethod()
+	if err != nil || len(auth) != 1 {
+		t.Fatalf("AuthMethod() count = %d, err = %v, want 1 with env fallback", len(auth), err)
 	}
 
 	c.Password = "cfg-pass"
-	if got := c.PasswordValue(); got != "cfg-pass" {
-		t.Fatalf("PasswordValue() = %q, want config value to take precedence", got)
+	got, err = c.PasswordValue()
+	if err != nil || got != "cfg-pass" {
+		t.Fatalf("PasswordValue() = %q, %v, want config value to take precedence", got, err)
 	}
 }
 
@@ -147,8 +153,63 @@ func Test_PasswordValueDecryptsEncrypted(t *testing.T) {
 	}
 
 	c := &Config{Name: "db", Password: encrypted}
-	if got := c.PasswordValue(); got != plain {
-		t.Fatalf("PasswordValue() = %q, want %q", got, plain)
+	got, err := c.PasswordValue()
+	if err != nil || got != plain {
+		t.Fatalf("PasswordValue() = %q, %v, want %q", got, err, plain)
+	}
+
+	auth, err := c.AuthMethod()
+	if err != nil || len(auth) != 1 {
+		t.Fatalf("AuthMethod() = %v, %v, want 1 auth method", auth, err)
 	}
 	setCachedMasterKey("")
 }
+
+func Test_FailFastOnDecryptionError(t *testing.T) {
+	setCachedMasterKey("")
+	mock := &mockKeyring{data: map[string]string{"sshs/master-key": "wrong-master-key"}}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+
+	// 使用 correct-key 加密
+	encrypted, err := EncryptPassword("real-secret", "correct-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := Config{
+		Name:     "node-fail-fast",
+		Host:     "192.168.99.99",
+		Password: encrypted,
+	}
+
+	// 1. PasswordValue 必须直接返回错误
+	_, err = c.PasswordValue()
+	if err == nil {
+		t.Fatal("expected PasswordValue to return error on decryption failure")
+	}
+
+	// 2. AuthMethod 必须直接返回错误
+	_, err = c.AuthMethod()
+	if err == nil {
+		t.Fatal("expected AuthMethod to return error on decryption failure")
+	}
+
+	// 3. dialThroughJumpers 必须在拨号前被拦截，mock dialer 绝不应被调用！
+	dialCalled := false
+	mockDial := func(dialer secureshell.Dialer, username, host string, authmethod ...ssh.AuthMethod) (*ssh.Client, error) {
+		dialCalled = true
+		return nil, nil
+	}
+
+	_, err = dialThroughJumpers(c, mockDial)
+	if err == nil {
+		t.Fatal("expected dialThroughJumpers to return error")
+	}
+	if dialCalled {
+		t.Fatal("FAIL-FAST VIOLATION: dialer was called despite decryption error!")
+	}
+	setCachedMasterKey("")
+}
+

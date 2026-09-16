@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,10 +161,11 @@ func Test_BeforeAction(t *testing.T) {
 
 	dir := t.TempDir()
 	configFile := filepath.Join(dir, ".sshs.yaml")
-	sample := `- name: node1
-  host: 192.168.1.1
-  password: "ENC(v1:sample)"
-`
+	encPass, err := EncryptPassword("sample-password", "universal-hook-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sample := fmt.Sprintf("- name: node1\n  host: 192.168.1.1\n  password: %q\n", encPass)
 	if err := os.WriteFile(configFile, []byte(sample), 0600); err != nil {
 		t.Fatal(err)
 	}

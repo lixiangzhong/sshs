@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -78,7 +79,18 @@ func Edit(b []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		// 安全擦除：退出前用 0 字节覆写，防止底层物理残留
+		if f, err := os.OpenFile(tempFile.Name(), os.O_WRONLY, 0600); err == nil {
+			if fi, err := f.Stat(); err == nil && fi.Size() > 0 {
+				zeroBytes := make([]byte, fi.Size())
+				_, _ = f.Write(zeroBytes)
+				_ = f.Sync()
+			}
+			_ = f.Close()
+		}
+		_ = os.Remove(tempFile.Name())
+	}()
 
 	// 权限严格控制为 0600，仅限当前用户读写
 	if err := tempFile.Chmod(0600); err != nil {
@@ -94,7 +106,16 @@ func Edit(b []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	cmd := exec.Command(editor, tempFile.Name())
+	var args []string
+	baseEditor := filepath.Base(editor)
+	if strings.Contains(baseEditor, "vim") || strings.Contains(baseEditor, "vi") {
+		// -n: 禁用 swap 交换文件，内容仅驻留内存
+		// -i NONE: 不读取/写入 viminfo，避免命令或输入历史泄露到 ~/.viminfo
+		args = append(args, "-n", "-i", "NONE")
+	}
+	args = append(args, tempFile.Name())
+
+	cmd := exec.Command(editor, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

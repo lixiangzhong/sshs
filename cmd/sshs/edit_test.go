@@ -201,3 +201,40 @@ func Test_EditActionFailsWithWrongMasterKey(t *testing.T) {
 
 	setCachedMasterKey("")
 }
+
+func Test_EditPassesSecurityFlagsToVim(t *testing.T) {
+	dir := t.TempDir()
+	mockVim := filepath.Join(dir, "mock_vim")
+	script := `#!/bin/sh
+set -e
+has_n=0
+has_i=0
+for arg in "$@"; do
+  if [ "$arg" = "-n" ]; then has_n=1; fi
+  if [ "$arg" = "-i" ]; then has_i=1; fi
+done
+if [ $has_n -ne 1 ] || [ $has_i -ne 1 ]; then
+  echo "missing security flags: $@" >&2
+  exit 1
+fi
+exit 0
+`
+	if err := os.WriteFile(mockVim, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldEditor := os.Getenv("EDITOR")
+	os.Setenv("EDITOR", mockVim)
+	defer func() {
+		if oldEditor == "" {
+			os.Unsetenv("EDITOR")
+		} else {
+			os.Setenv("EDITOR", oldEditor)
+		}
+	}()
+
+	_, err := Edit([]byte("test: content\n"))
+	if err != nil {
+		t.Fatalf("Edit failed when verifying security flags: %v", err)
+	}
+}

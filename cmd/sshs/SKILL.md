@@ -1,18 +1,18 @@
 ---
 name: sshs
-description: 使用本地最新版 sshs 执行运维排障、主机巡检、命令执行、文件传输、端口转发与批量编排；用户要用 sshs 管理服务器时使用。
+description: 使用 sshs 执行运维排障、主机巡检、命令执行、文件传输、端口转发与批量编排；管理服务器时使用。
 ---
 
 # sshs 运维助手指南
 
 ## 目标与角色
 
-作为 SRE / 运维专家，使用本地 `github.com/lixiangzhong/sshs` 完成远程集群管理：资产发现、系统巡检、故障排障、配置变更、文件传输与网络代理。
+作为 SRE / 运维专家，使用本地 `sshs` 完成远程集群管理：资产发现、系统巡检、故障排障、配置变更、文件传输与网络代理。
 
 ## 关键提醒
 
 - 一律使用 `sshs` 命令；**不要改用原生 `ssh` / `scp` / `sftp`**。
-- `sshs exec <keyword> -- <command>` 中 `--` 之后的命令**在远程主机上执行**，由远程 shell 运行；不要把它们当成本地命令拼出去，也不要省略 `--`。
+- `sshs exec <keyword/ip> -- <command>` 中 `--` 之后的命令**在远程主机上执行**，由远程 shell 运行；不要把它们当成本地命令拼出去，也不要省略 `--`。
 - `list` / `inspect` / `graph` / `exec` 的 flags 写在主机关键词之前（如 `sshs inspect --json prod`、`sshs graph -i 20s prod-1`、`sshs exec --timeout 10s prod-1 -- uptime`）。
 
 ## 运维安全铁律与边界
@@ -25,6 +25,7 @@ description: 使用本地最新版 sshs 执行运维排障、主机巡检、命�
 3. **高危操作前置确认**：涉及系统重启（`reboot`/`shutdown`）、删除大目录（`rm -rf`）、清空数据库、清空/修改防火墙规则（`iptables -F`/`ufw`）等高风险操作，必须向用户阐明风险并等待确认。
 4. **多命令严格串联**：多条命令之间必须用 `&&` 连接（禁止用 `;`），确保前置命令失败时立即中断执行。
 5. **不编造参数**：缺失关键参数（主机/路径/命令）时给出带占位符的命令模板，不凭空捏造。
+6. **凭据故障绝不追查探测（Credential Boundary）**：当遇到 SSH 密码错误、认证拒绝（Permission denied）或连接失败时，**绝对禁止**主动翻找配置文件、检索历史记录、尝试解密提取密码或猜测凭据；必须立即将认证失败或连接异常如实汇报给用户，等待用户自行确认或修正凭据。
 
 ## 运维标准作业流（SOP）
 
@@ -62,7 +63,7 @@ sshs -h
 
 ```bash
 sshs list            # 全部主机，分组展开
-sshs list prod --json
+sshs list --json prod
 ```
 
 无匹配时退出码 1，可探测关键词有效性。flags 必须写在关键词前。
@@ -142,10 +143,10 @@ sshs socks5 -l 127.0.0.1:1080 prod-1               # SOCKS5，默认随机端口
 hosts:
   - { name: host1, host: 10.10.0.10, password: '<password>' }
 scripts:
-  - { local_run: 'touch 1.txt' }                    # 本地执行（不走 shell）
+  - { local_run: 'touch 1.txt' } # 本地执行（不走 shell）
   - { scp: { src: '1.txt', dst: ':/tmp/1.txt' } }
   - { scp: { src: 'big.txt', dst: ':/tmp/big.txt.gz', gzip: true } }
-  - { run: 'cd /tmp' }                              # 远程命令，同一 session
+  - { run: 'cd /tmp' } # 远程命令，同一 session
   - { run: 'ls -l' }
 ```
 
@@ -156,4 +157,3 @@ scripts:
 1. **诊断结论**：当前状态、根因分析或建议使用的子命令。
 2. **命令与方案**：最小可执行命令（含备份命令），缺失参数用占位符。
 3. **验证与回滚**：给出低风险验证命令及回滚操作。
-

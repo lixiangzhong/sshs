@@ -65,7 +65,7 @@ func authMethods(c Config) []string {
 	if c.KeyPath != "" {
 		auth = append(auth, "key")
 	}
-	if c.PasswordValue() != "" {
+	if c.HasPassword() {
 		auth = append(auth, "password")
 	}
 	return auth

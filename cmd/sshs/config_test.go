@@ -108,3 +108,47 @@ func Test_loadSortedHosts(t *testing.T) {
 		t.Fatalf("hosts not sorted: %v", hosts)
 	}
 }
+
+func Test_HasPassword(t *testing.T) {
+	t.Setenv("SSHS_PASSWORD", "")
+	c := Config{Name: "web"}
+	if c.HasPassword() {
+		t.Fatal("HasPassword() = true, want false")
+	}
+
+	c.Password = "plain-pass"
+	if !c.HasPassword() {
+		t.Fatal("HasPassword() = false, want true for plain password")
+	}
+
+	c.Password = "ENC(v1:dummy)"
+	if !c.HasPassword() {
+		t.Fatal("HasPassword() = false, want true for encrypted password")
+	}
+
+	c.Password = ""
+	t.Setenv("SSHS_PASSWORD", "env-pass")
+	if !c.HasPassword() {
+		t.Fatal("HasPassword() = false, want true for env fallback")
+	}
+}
+
+func Test_PasswordValueDecryptsEncrypted(t *testing.T) {
+	setCachedMasterKey("")
+	mock := &mockKeyring{data: map[string]string{"sshs/master-key": "master-secret"}}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+
+	plain := "my-database-pwd"
+	encrypted, err := EncryptPassword(plain, "master-secret")
+	if err != nil {
+		t.Fatalf("EncryptPassword failed: %v", err)
+	}
+
+	c := &Config{Name: "db", Password: encrypted}
+	if got := c.PasswordValue(); got != plain {
+		t.Fatalf("PasswordValue() = %q, want %q", got, plain)
+	}
+	setCachedMasterKey("")
+}

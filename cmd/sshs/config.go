@@ -15,7 +15,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"golang.org/x/crypto/ssh"
-	"gopkg.in/yaml.v2"
+
+	"github.com/goccy/go-yaml"
 )
 
 // configFilenames 是 sshs 依次查找的配置文件候选列表。
@@ -61,12 +62,38 @@ func (c *Config) Username() string {
 	return c.User
 }
 
-// PasswordValue 返回生效的密码：配置中写明则用配置值，否则回退环境变量 SSHS_PASSWORD。
-func (c *Config) PasswordValue() string {
+// HasPassword 判断该主机是否配置了密码（支持明文密码、密文密码或环境变量回退）。
+// 该方法仅做配置存在性探测，绝对不触发解密或终端输入交互。
+func (c *Config) HasPassword() bool {
 	if c.Password != "" {
-		return c.Password
+		return true
 	}
-	return os.Getenv("SSHS_PASSWORD")
+	return os.Getenv("SSHS_PASSWORD") != ""
+}
+
+// PasswordValue 返回生效的密码：
+// 1. 若配置中包含 ENC(v1:...) 密文，则尝试使用 Master Key 解密；
+// 2. 若配置中为普通明文，直接返回；
+// 3. 否则回退环境变量 SSHS_PASSWORD。
+func (c *Config) PasswordValue() string {
+	raw := c.Password
+	if raw == "" {
+		return os.Getenv("SSHS_PASSWORD")
+	}
+	if !IsEncrypted(raw) {
+		return raw
+	}
+	masterKey, err := ResolveMasterKey(false)
+	if err != nil {
+		log.Printf("failed to resolve master key: %v", err)
+		return ""
+	}
+	plain, err := DecryptPassword(raw, masterKey)
+	if err != nil {
+		log.Printf("failed to decrypt password for host %s: %v", c.Name, err)
+		return ""
+	}
+	return plain
 }
 
 func (c *Config) RemotePort() int {

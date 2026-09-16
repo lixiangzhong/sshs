@@ -12,10 +12,10 @@ import (
 
 	"github.com/lixiangzhong/sshs/pkg/secureshell"
 
+	"github.com/goccy/go-yaml"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/proxy"
-	"gopkg.in/yaml.v2"
 )
 
 type runConfig struct {

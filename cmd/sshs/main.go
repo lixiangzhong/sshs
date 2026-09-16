@@ -8,7 +8,7 @@ import (
 )
 
 // version 默认值供本地直接编译使用；发版时由 GoReleaser 通过 -ldflags 注入 tag 版本号
-var version = "1.25.1"
+var version = "1.26.0"
 
 func main() {
 	log.SetFlags(0)
@@ -26,6 +26,8 @@ func newApp() *cli.App {
 		Usage:     "make ssh scp easy",
 		UsageText: "sshs [flags] [command] [args...]",
 		Version:   version,
+		Before:    BeforeAction,
+		After:     AfterAction,
 		Action:    TerminalAction,
 		Commands: []*cli.Command{
 			{
@@ -234,6 +236,13 @@ scripts:
 				Action:    DoctorAction,
 			},
 			{
+				Name:      "master-key",
+				Aliases:   []string{"keyring"},
+				Usage:     "manage master password in system keyring (status|set|delete)",
+				UsageText: "sshs master-key [status|set|delete]",
+				Action:    MasterKeyAction,
+			},
+			{
 				Name:      "skill",
 				Usage:     "show sshs agent skill documentation",
 				UsageText: "sshs skill",
@@ -242,3 +251,12 @@ scripts:
 		},
 	}
 }
+
+func BeforeAction(c *cli.Context) error {
+	return EnsureMasterKey()
+}
+
+func AfterAction(c *cli.Context) error {
+	return AutoEncryptAction(c)
+}
+

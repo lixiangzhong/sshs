@@ -8,7 +8,7 @@ import (
 )
 
 // version 默认值供本地直接编译使用；发版时由 GoReleaser 通过 -ldflags 注入 tag 版本号
-var version = "1.26.4"
+var version = "1.27.0"
 
 func main() {
 	log.SetFlags(0)
@@ -243,6 +243,14 @@ scripts:
 				Action:    MasterKeyAction,
 			},
 			{
+				Name:      "dec",
+				Aliases:   []string{"decrypt"},
+				Usage:     "decrypt content from stdin to stdout",
+				UsageText: "sshs dec",
+				Hidden:    true,
+				Action:    DecryptAction,
+			},
+			{
 				Name:      "skill",
 				Usage:     "show sshs agent skill documentation",
 				UsageText: "sshs skill",
@@ -253,6 +261,13 @@ scripts:
 }
 
 func BeforeAction(c *cli.Context) error {
+	cmd := c.Args().First()
+	if c.Command != nil && c.Command.Name != "sshs" && c.Command.Name != "" {
+		cmd = c.Command.Name
+	}
+	if cmd == "dec" || cmd == "decrypt" {
+		return nil
+	}
 	return EnsureMasterKey()
 }
 

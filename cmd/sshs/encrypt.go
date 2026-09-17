@@ -229,6 +229,10 @@ func AutoEncryptAction(c *cli.Context) error {
 		}
 	}
 
+	if cmd == "dec" || cmd == "decrypt" {
+		return nil
+	}
+
 	configPath, err := findTargetConfigFile(c)
 	if err != nil {
 		return nil

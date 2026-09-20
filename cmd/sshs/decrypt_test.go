@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -159,6 +161,14 @@ func Test_DecryptActionYAML(t *testing.T) {
 }
 
 func Test_DecryptActionPlainContentPassthrough(t *testing.T) {
+	masterKey := "test-plain-passthrough-key"
+	mock := &mockKeyring{data: map[string]string{"sshs/master-key": masterKey}}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+	setCachedMasterKey(masterKey)
+	defer setCachedMasterKey("")
+
 	plainInput := "hello: world\nnumber: 12345\n"
 
 	promptCalled := false
@@ -174,7 +184,7 @@ func Test_DecryptActionPlainContentPassthrough(t *testing.T) {
 
 	decryptPromptMasterKey = func() (string, error) {
 		promptCalled = true
-		return "key", nil
+		return masterKey, nil
 	}
 	decryptStdinReader = func() io.Reader {
 		return strings.NewReader(plainInput)
@@ -188,8 +198,8 @@ func Test_DecryptActionPlainContentPassthrough(t *testing.T) {
 		t.Fatalf("app.Run dec failed: %v", err)
 	}
 
-	if promptCalled {
-		t.Fatal("prompt should NOT be called when input has no encrypted data")
+	if !promptCalled {
+		t.Fatal("prompt SHOULD be called to verify master password first")
 	}
 	if outBuf.String() != plainInput {
 		t.Fatalf("expected plain passthrough %q, got %q", plainInput, outBuf.String())
@@ -239,14 +249,27 @@ func Test_DecryptActionWrongMasterKeyFails(t *testing.T) {
 }
 
 func Test_DecryptActionEmptyInputFails(t *testing.T) {
+	masterKey := "empty-input-master-key"
+	mock := &mockKeyring{data: map[string]string{"sshs/master-key": masterKey}}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+	setCachedMasterKey(masterKey)
+	defer setCachedMasterKey("")
+
+	origPrompt := decryptPromptMasterKey
 	origReader := decryptStdinReader
 	origExiter := cli.OsExiter
 	defer func() {
+		decryptPromptMasterKey = origPrompt
 		decryptStdinReader = origReader
 		cli.OsExiter = origExiter
 	}()
 	cli.OsExiter = func(int) {}
 
+	decryptPromptMasterKey = func() (string, error) {
+		return masterKey, nil
+	}
 	decryptStdinReader = func() io.Reader {
 		return strings.NewReader("")
 	}
@@ -257,6 +280,180 @@ func Test_DecryptActionEmptyInputFails(t *testing.T) {
 		t.Fatal("expected error on empty stdin, got nil")
 	}
 	if !strings.Contains(err.Error(), "empty input") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func Test_DecryptActionInteractivePrompt(t *testing.T) {
+	masterKey := "interactive-master-key"
+	mock := &mockKeyring{data: map[string]string{"sshs/master-key": masterKey}}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+	setCachedMasterKey(masterKey)
+	defer setCachedMasterKey("")
+
+	plainPass := "my-interactive-secret"
+	encPass, err := EncryptPassword(plainPass, masterKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	origPrompt := decryptPromptMasterKey
+	origCipherPrompt := decryptPromptCiphertext
+	origReader := decryptStdinReader
+	origHasStdin := decryptHasStdin
+	origExiter := cli.OsExiter
+	defer func() {
+		decryptPromptMasterKey = origPrompt
+		decryptPromptCiphertext = origCipherPrompt
+		decryptStdinReader = origReader
+		decryptHasStdin = origHasStdin
+		cli.OsExiter = origExiter
+	}()
+	cli.OsExiter = func(int) {}
+
+	masterKeyPromptCalled := false
+	ciphertextPromptCalled := false
+
+	decryptPromptMasterKey = func() (string, error) {
+		masterKeyPromptCalled = true
+		return masterKey, nil
+	}
+	decryptPromptCiphertext = func() (string, error) {
+		ciphertextPromptCalled = true
+		return encPass, nil
+	}
+	decryptStdinReader = func() io.Reader {
+		return os.Stdin
+	}
+	decryptHasStdin = func() bool {
+		return false
+	}
+
+	app := newApp()
+	var outBuf bytes.Buffer
+	app.Writer = &outBuf
+
+	if err := app.Run([]string{"sshs", "decrypt"}); err != nil {
+		t.Fatalf("app.Run decrypt failed: %v", err)
+	}
+
+	if !masterKeyPromptCalled {
+		t.Fatal("expected master key prompt to be called first")
+	}
+	if !ciphertextPromptCalled {
+		t.Fatal("expected ciphertext prompt to be called when there is no stdin")
+	}
+	got := strings.TrimSpace(outBuf.String())
+	if got != plainPass {
+		t.Fatalf("expected decrypted plain %q, got %q", plainPass, got)
+	}
+}
+
+func Test_DecryptActionArgument(t *testing.T) {
+	masterKey := "arg-master-key"
+	mock := &mockKeyring{data: map[string]string{"sshs/master-key": masterKey}}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+	setCachedMasterKey(masterKey)
+	defer setCachedMasterKey("")
+
+	plainPass := "arg-secret-pass"
+	encPass, err := EncryptPassword(plainPass, masterKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	origPrompt := decryptPromptMasterKey
+	origCipherPrompt := decryptPromptCiphertext
+	origReader := decryptStdinReader
+	origHasStdin := decryptHasStdin
+	origExiter := cli.OsExiter
+	defer func() {
+		decryptPromptMasterKey = origPrompt
+		decryptPromptCiphertext = origCipherPrompt
+		decryptStdinReader = origReader
+		decryptHasStdin = origHasStdin
+		cli.OsExiter = origExiter
+	}()
+	cli.OsExiter = func(int) {}
+
+	decryptPromptMasterKey = func() (string, error) {
+		return masterKey, nil
+	}
+	cipherPromptCalled := false
+	decryptPromptCiphertext = func() (string, error) {
+		cipherPromptCalled = true
+		return "", nil
+	}
+	decryptStdinReader = func() io.Reader {
+		return os.Stdin
+	}
+	decryptHasStdin = func() bool {
+		return false
+	}
+
+	app := newApp()
+	var outBuf bytes.Buffer
+	app.Writer = &outBuf
+
+	if err := app.Run([]string{"sshs", "dec", encPass}); err != nil {
+		t.Fatalf("app.Run dec with arg failed: %v", err)
+	}
+
+	if cipherPromptCalled {
+		t.Fatal("ciphertext prompt should NOT be called when argument is provided")
+	}
+	got := strings.TrimSpace(outBuf.String())
+	if got != plainPass {
+		t.Fatalf("expected decrypted plain %q, got %q", plainPass, got)
+	}
+}
+
+func Test_DecryptActionInteractiveEmptyCiphertextFails(t *testing.T) {
+	masterKey := "empty-interactive-master-key"
+	mock := &mockKeyring{data: map[string]string{"sshs/master-key": masterKey}}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+	setCachedMasterKey(masterKey)
+	defer setCachedMasterKey("")
+
+	origPrompt := decryptPromptMasterKey
+	origCipherPrompt := decryptPromptCiphertext
+	origReader := decryptStdinReader
+	origHasStdin := decryptHasStdin
+	origExiter := cli.OsExiter
+	defer func() {
+		decryptPromptMasterKey = origPrompt
+		decryptPromptCiphertext = origCipherPrompt
+		decryptStdinReader = origReader
+		decryptHasStdin = origHasStdin
+		cli.OsExiter = origExiter
+	}()
+	cli.OsExiter = func(int) {}
+
+	decryptPromptMasterKey = func() (string, error) {
+		return masterKey, nil
+	}
+	decryptPromptCiphertext = func() (string, error) {
+		return "", errors.New("encrypted password cannot be empty")
+	}
+	decryptStdinReader = func() io.Reader {
+		return os.Stdin
+	}
+	decryptHasStdin = func() bool {
+		return false
+	}
+
+	app := newApp()
+	err := app.Run([]string{"sshs", "decrypt"})
+	if err == nil {
+		t.Fatal("expected error on empty interactive ciphertext, got nil")
+	}
+	if !strings.Contains(err.Error(), "empty") {
 		t.Fatalf("unexpected error message: %v", err)
 	}
 }

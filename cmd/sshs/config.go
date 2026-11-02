@@ -83,7 +83,7 @@ func (c *Config) PasswordValue() (string, error) {
 	if !IsEncrypted(raw) {
 		return raw, nil
 	}
-	masterKey, err := ResolveMasterKey(false)
+	masterKey, err := ResolveMasterKey()
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve master key: %w", err)
 	}

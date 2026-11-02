@@ -61,24 +61,51 @@ vi ~/.sshs.yaml
 > ```
 >
 > 配置中写明的 `password` 优先；未配置钥匙串默认密码时行为不变。
+> 该回退只支持系统钥匙串：无桌面的 Linux 服务器请在配置中直接写 `password`（可用主口令加密为 `ENC(v1:...)`）。
 
 ### 密码加密与安全防护
 
-为了防止 AI Agent 或其他第三方应用扫描读取配置文件中的明文密码，支持使用主口令将密码加密存储为 `ENC(v1:...)`。主口令直接交由**系统钥匙串（macOS Keychain / Secret Service）**托管，无需配置任何环境变量，安全且免敲键盘：
+为了防止 AI Agent 或其他第三方应用扫描读取配置文件中的明文密码，支持使用主口令将密码加密存储为 `ENC(v1:...)`。主口令按以下优先级读取，保存时优先系统钥匙串、不可用则自动落盘 0600 文件：
+
+| 优先级 | 主密码后端 | 适用场景 |
+| --- | --- | --- |
+| 1 | `SSHS_MASTER_KEY` 环境变量 | MCP / CI 等需要临时注入、不落盘的场景 |
+| 2 | 系统钥匙串（macOS Keychain / Linux Secret Service） | macOS、带桌面的 Linux |
+| 3 | 主密码文件（`SSHS_MASTER_KEY_FILE`，默认 `~/.config/sshs/master-key`，权限 0600） | 无桌面的 Linux 服务器、容器 |
 
 ```sh
 # 1. 自动加密与日常使用：无需手动执行加密命令
 #    - 使用 `sshs edit` 编辑保存时，自动全量加密落盘；
 #    - 外部手动修改配置写入明文后，执行任何 sshs 命令退出时，系统均会自动将明文加密存盘；
-#    - 日常使用完全免密秒连（自动从系统钥匙串静默获取主口令并在内存解密）。
+#    - 日常使用完全免密秒连（自动从主密码后端静默获取主口令并在内存解密）。
 sshs server1
 sshs exec server1 -- uptime
 
-# 2. 钥匙串主口令维护管理
-sshs master-key status      # 检查钥匙串是否已配置主口令
-sshs master-key set         # 手动更新/重设钥匙串中的主口令
-sshs master-key delete      # 从系统钥匙串中清除主口令
+# 2. 主口令维护管理
+sshs master-key status      # 查看主口令是否已配置及当前来源（环境变量/钥匙串/文件）
+sshs master-key set         # 交互式设置；钥匙串不可用时自动落盘 0600 文件
+printf '%s\n' "$KEY" | sshs master-key set   # 非交互场景：走 stdin 管道，避免主密码进入 shell history
+sshs master-key delete      # 清除钥匙串与文件中的主口令
+
+# 3. 自动化场景：用环境变量指定主密码或密钥文件位置（不落盘）
+SSHS_MASTER_KEY="$KEY" sshs list
+SSHS_MASTER_KEY_FILE=/run/secrets/sshs-master sshs list
 ```
+
+#### Linux / 无桌面服务器（headless）
+
+Linux 的系统钥匙串依赖 Secret Service（D-Bus），无桌面的服务器、容器以及非交互 SSH 会话中通常不存在该服务。此时 `sshs` 会自动降级到 0600 主密码文件，无需额外配置，也不会阻塞任何命令：
+
+```sh
+# 首次设置：写入 ~/.config/sshs/master-key（0600）
+sshs master-key set
+
+# 之后所有非交互调用（脚本、Agent、ssh host 'sshs ...'）静默可用
+sshs list
+sshs exec web -- uptime
+```
+
+安全边界：主密码文件与 SSH 私钥同级，只防止"顺手扫描配置文件的工具/Agent"，不防止能读取当前用户 home 的进程。需要更强隔离时，把主密码放到独立 secret（如 `/run/secrets/`、Docker secret、systemd credential）并用 `SSHS_MASTER_KEY_FILE` 指向它，或让 Agent 以独立用户运行。
 
 ## Usage
 

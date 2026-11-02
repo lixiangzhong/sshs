@@ -8,7 +8,7 @@ import (
 )
 
 // version 默认值供本地直接编译使用；发版时由 GoReleaser 通过 -ldflags 注入 tag 版本号
-var version = "1.27.1"
+var version = "1.28.0"
 
 func main() {
 	log.SetFlags(0)
@@ -265,7 +265,10 @@ func BeforeAction(c *cli.Context) error {
 	if c.Command != nil && c.Command.Name != "sshs" && c.Command.Name != "" {
 		cmd = c.Command.Name
 	}
-	if cmd == "dec" || cmd == "decrypt" {
+	// 这些子命令不依赖已配置的主密码：dec 自身负责解密提示、master-key 负责管理主密码本身、skill 只输出文档。
+	// 豁免可避免无 TTY 环境下无法 bootstrap 主密码的死锁，也避免管理命令触发重复提示。
+	switch cmd {
+	case "dec", "decrypt", "master-key", "keyring", "skill":
 		return nil
 	}
 	return EnsureMasterKey()

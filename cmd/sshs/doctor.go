@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"runtime"
 	"sort"
@@ -51,7 +53,10 @@ func checkDoctorIssues(cfg []Config) []doctorIssue {
 	// 1. 重复远程主机地址检测
 	issues = append(issues, checkDuplicateHosts(flatHosts)...)
 
-	// 2. 主机静态规范与凭据健康检查
+	// 2. 主密码持久化后端检查（文件权限、不可用原因）
+	issues = append(issues, checkMasterKeyBackend()...)
+
+	// 3. 主机静态规范与凭据健康检查
 	for _, h := range flatHosts {
 		name := strings.TrimPrefix(h.Name, "/")
 
@@ -179,19 +184,39 @@ func checkKeyPath(name, rawPath, passphrase string) *doctorIssue {
 	return nil
 }
 
+// checkMasterKeyBackend 检查主密码持久化后端可用性：
+// 未配置主密码安静通过（可能使用明文密码或 SSHS_MASTER_KEY）；已配置文件但权限/内容异常则报问题，
+// 避免 Linux 服务器上主密码静默失效后才发现所有 ENC 密文都解不开。
+func checkMasterKeyBackend() []doctorIssue {
+	path, err := MasterKeyFilePath()
+	if err != nil {
+		return []doctorIssue{{Message: fmt.Sprintf("master key file path unresolved: %v", err)}}
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		if errors.Is(statErr, fs.ErrNotExist) {
+			return nil
+		}
+		return []doctorIssue{{Message: fmt.Sprintf("master key file %q inaccessible: %v", path, statErr)}}
+	}
+	if _, readErr := readMasterKeyFile(); readErr != nil {
+		return []doctorIssue{{Message: fmt.Sprintf("master key file unusable: %v", readErr)}}
+	}
+	return nil
+}
+
 func checkEncryptedPassword(name, password string) *doctorIssue {
 	if !IsEncrypted(password) {
 		return nil
 	}
 	masterKey := getCachedMasterKey()
 	if masterKey == "" {
-		ringKey, err := activeKeyring.Get(keyringService, keyringMasterKey)
-		if err != nil || ringKey == "" {
+		key, _ := LoadMasterKey()
+		if key == "" {
 			return &doctorIssue{
-				Message: fmt.Sprintf("host %s: encrypted password present but master key not found in keyring", name),
+				Message: fmt.Sprintf("host %s: encrypted password present but master key is not configured (keyring, file or %s)", name, masterKeyEnv),
 			}
 		}
-		masterKey = ringKey
+		masterKey = key
 	}
 	_, err := DecryptPassword(password, masterKey)
 	if err != nil {

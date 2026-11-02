@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -186,7 +187,8 @@ func findTargetConfigFile(c *cli.Context) (string, error) {
 	return "", errors.New("no config file found")
 }
 
-func writeConfigFileAtomic(targetFile string, data []byte, mode os.FileMode) error {
+// writeFileAtomic 以原子方式写入文件（临时文件 + rename），并设置目标权限。
+func writeFileAtomic(targetFile string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(targetFile)
 	tempFile, err := os.CreateTemp(dir, ".sshs-config-*.tmp")
 	if err != nil {
@@ -211,8 +213,10 @@ func writeConfigFileAtomic(targetFile string, data []byte, mode os.FileMode) err
 }
 
 // AutoEncryptAction 是在所有命令执行完毕后的 AfterFunc 钩子中调用的自动加密函数。
-// 如果配置文件中存在未加密的明文密码，将自动使用 Keyring 中的主密码完成加密存盘；
+// 如果配置文件中存在未加密的明文密码，将自动使用持久化后端（系统钥匙串或主密码文件）中的主密码完成加密存盘；
 // 若无明文密码或未配置主密码，则静默安全返回，不影响命令正常输出与脚本管道。
+// 注意：自动加密只使用持久化主密码，忽略 SSHS_MASTER_KEY 环境变量，避免临时注入的主密码把配置
+// 加密成其他环境无法解密的内容。
 func AutoEncryptAction(c *cli.Context) error {
 	cmd := ""
 	if c.Command != nil {
@@ -238,8 +242,8 @@ func AutoEncryptAction(c *cli.Context) error {
 		return nil
 	}
 
-	masterKey, err := GetKeyringMasterKey()
-	if err != nil || masterKey == "" {
+	masterKey, _ := loadPersistedMasterKey()
+	if masterKey == "" {
 		return nil
 	}
 
@@ -258,7 +262,7 @@ func AutoEncryptAction(c *cli.Context) error {
 		return nil
 	}
 
-	if err := writeConfigFileAtomic(configPath, newContent, info.Mode()); err != nil {
+	if err := writeFileAtomic(configPath, newContent, info.Mode()); err != nil {
 		return err
 	}
 
@@ -266,6 +270,8 @@ func AutoEncryptAction(c *cli.Context) error {
 	return nil
 }
 
+// MasterKeyAction 管理主密码：set / delete / status。
+// 主密码优先写入系统钥匙串；钥匙串不可用时（如无 Secret Service 的 Linux 服务器）落盘到 0600 文件。
 func MasterKeyAction(c *cli.Context) error {
 	action := c.Args().First()
 	out := c.App.Writer
@@ -275,55 +281,79 @@ func MasterKeyAction(c *cli.Context) error {
 
 	switch action {
 	case "set":
-		var key string
-		if c.NArg() > 1 {
-			key = c.Args().Get(1)
+		key, err := readMasterKeyInput(c)
+		if err != nil {
+			return cli.Exit(err.Error(), 1)
+		}
+		source, location, err := SaveMasterKey(key)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("save master key: %v", err), 1)
+		}
+		if source == masterKeySourceFile {
+			fmt.Fprintf(out, "Master key saved to file %s (mode 0600).\n", location)
 		} else {
-			stdinFd := int(syscall.Stdin)
-			if !stdinTerminalCheck(stdinFd) {
-				return cli.Exit("interactive terminal required to set master key", 1)
-			}
-			fmt.Fprint(os.Stderr, "Enter Master Password: ")
-			b1, err := terminalPasswordReader(stdinFd)
-			fmt.Fprintln(os.Stderr)
-			if err != nil {
-				return cli.Exit(fmt.Sprintf("read master password: %v", err), 1)
-			}
-			fmt.Fprint(os.Stderr, "Confirm Master Password: ")
-			b2, err := terminalPasswordReader(stdinFd)
-			fmt.Fprintln(os.Stderr)
-			if err != nil {
-				return cli.Exit(fmt.Sprintf("read confirm master password: %v", err), 1)
-			}
-			if string(b1) != string(b2) {
-				return cli.Exit("master passwords do not match", 1)
-			}
-			key = strings.TrimSpace(string(b1))
+			fmt.Fprintln(out, "Master key saved to system keyring.")
 		}
-		if err := SetKeyringMasterKey(key); err != nil {
-			return cli.Exit(fmt.Sprintf("save master key to keyring: %v", err), 1)
-		}
-		fmt.Fprintln(out, "Master key successfully saved to system keyring.")
 		return nil
 
 	case "del", "delete", "remove":
-		if err := DeleteKeyringMasterKey(); err != nil {
-			return cli.Exit(fmt.Sprintf("delete master key from keyring: %v", err), 1)
+		if err := DeleteMasterKey(); err != nil {
+			return cli.Exit(fmt.Sprintf("delete master key: %v", err), 1)
 		}
-		fmt.Fprintln(out, "Master key removed from system keyring.")
+		fmt.Fprintln(out, "Master key removed from system keyring and master key file.")
 		return nil
 
 	case "status", "":
-		key, err := GetKeyringMasterKey()
-		if err == nil && key != "" {
+		_, source := LoadMasterKey()
+		switch source {
+		case masterKeySourceEnv:
+			fmt.Fprintf(out, "Status: Master key is configured via %s environment variable.\n", masterKeyEnv)
+		case masterKeySourceKeyring:
 			fmt.Fprintln(out, "Status: Master key is configured in system keyring.")
-		} else {
-			fmt.Fprintln(out, "Status: Master key is NOT configured in system keyring.")
+		case masterKeySourceFile:
+			path, _ := MasterKeyFilePath()
+			fmt.Fprintf(out, "Status: Master key is configured in file %s.\n", path)
+		default:
+			masterKeyStatusHint(out)
 		}
 		return nil
 
 	default:
 		return cli.Exit(fmt.Sprintf("unknown action %q, usage: sshs master-key [status|set|delete]", action), 1)
 	}
+}
+
+// masterKeyStatusHint 在未配置主密码时输出状态，并指出已存在但不可用的主密码文件原因（如权限过宽）。
+func masterKeyStatusHint(out io.Writer) {
+	if _, err := readMasterKeyFile(); err != nil {
+		path, _ := MasterKeyFilePath()
+		fmt.Fprintf(out, "Status: Master key file %s exists but is unusable: %v\n", path, err)
+		return
+	}
+	fmt.Fprintln(out, "Status: Master key is NOT configured.")
+}
+
+// readMasterKeyInput 依次从参数、stdin 管道、交互终端读取新主密码。
+// 参数方式会把主密码暴露在 shell history 与进程列表中，仅为兼容保留；推荐使用管道或交互输入。
+func readMasterKeyInput(c *cli.Context) (string, error) {
+	if c.NArg() > 1 {
+		key := strings.TrimSpace(c.Args().Get(1))
+		if key == "" {
+			return "", errors.New("master password cannot be empty")
+		}
+		return key, nil
+	}
+
+	if key, piped, err := readMasterKeyFromStdin(); err != nil {
+		return "", err
+	} else if piped {
+		return key, nil
+	}
+
+	stdinFd := int(syscall.Stdin)
+	if !stdinTerminalCheck(stdinFd) {
+		return "", errors.New("interactive terminal required to set master key (or pipe the password to stdin)")
+	}
+	return readConfirmedPassword(stdinFd)
 }
 

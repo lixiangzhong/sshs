@@ -105,7 +105,7 @@ func Test_ResolveMasterKeyFromKeyring(t *testing.T) {
 	activeKeyring = mock
 	defer func() { activeKeyring = oldKeyring }()
 
-	key, err := ResolveMasterKey(false)
+	key, err := ResolveMasterKey()
 	if err != nil {
 		t.Fatalf("ResolveMasterKey failed: %v", err)
 	}
@@ -115,7 +115,7 @@ func Test_ResolveMasterKeyFromKeyring(t *testing.T) {
 
 	// 验证进程缓存已生效
 	mock.data = nil
-	cached, err := ResolveMasterKey(false)
+	cached, err := ResolveMasterKey()
 	if err != nil {
 		t.Fatalf("ResolveMasterKey cached failed: %v", err)
 	}

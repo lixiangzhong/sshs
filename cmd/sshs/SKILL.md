@@ -27,6 +27,13 @@ description: 使用 sshs 执行运维排障、主机巡检、命令执行、文�
 5. **不编造参数**：缺失关键参数（主机/路径/命令）时给出带占位符的命令模板，不凭空捏造。
 6. **凭据故障绝不追查探测（Credential Boundary）**：当遇到 SSH 密码错误、认证拒绝（Permission denied）或连接失败时，**绝对禁止**主动翻找配置文件、检索历史记录、尝试解密提取密码或猜测凭据；必须立即将认证失败或连接异常如实汇报给用户，等待用户自行确认或修正凭据。
 
+## 主口令与凭据配置
+
+- 遇到 `master key is not configured` / `failed to decrypt password`：**不要**猜测主口令、翻找密钥文件或尝试暴力解密；如实报告并等待用户处理。
+- 用户可自行执行 `sshs master-key set` 重新设置主口令，或通过 `SSHS_MASTER_KEY` / `SSHS_MASTER_KEY_FILE` 环境变量注入后重试。
+- 排查凭据问题用 `sshs master-key status`（仅显示是否配置及来源，不输出主口令）与 `sshs doctor`。
+- 无桌面的 Linux 服务器上主口令保存在 `~/.config/sshs/master-key`（0600 权限），非交互调用会静默使用，无需重复输入。
+
 ## 运维标准作业流（SOP）
 
 1. **资产发现**：用 `sshs list --json` 获取集群节点列表、分组与跳板机拓扑。

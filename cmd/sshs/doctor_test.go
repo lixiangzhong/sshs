@@ -164,11 +164,11 @@ func Test_checkDoctorIssuesEncryptedPassword(t *testing.T) {
 		t.Fatalf("unexpected issue message: %s", issues[0].Message)
 	}
 
-	// 当钥匙串中未找到 master-key 时
+	// 当钥匙串与主密码文件中都未找到 master-key 时
 	delete(mock.data, "sshs/master-key")
 	setCachedMasterKey("")
 	issuesNoKey := checkDoctorIssues([]Config{{Name: "no-key", Host: "10.0.0.3", Password: validEnc}})
-	if len(issuesNoKey) != 1 || !strings.Contains(issuesNoKey[0].Message, "master key not found in keyring") {
+	if len(issuesNoKey) != 1 || !strings.Contains(issuesNoKey[0].Message, "master key is not configured") {
 		t.Fatalf("expected master key missing issue, got: %#v", issuesNoKey)
 	}
 }

@@ -56,7 +56,7 @@ func EditAction(c *cli.Context) error {
 	}
 
 	// 4. 原子安全写入磁盘目标配置文件
-	if err := writeConfigFileAtomic(configPath, toWrite, info.Mode()); err != nil {
+	if err := writeFileAtomic(configPath, toWrite, info.Mode()); err != nil {
 		return cli.Exit(fmt.Sprintf("write config file: %v", err), 1)
 	}
 	return nil

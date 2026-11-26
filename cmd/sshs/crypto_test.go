@@ -189,3 +189,17 @@ func Test_EnsureMasterKey(t *testing.T) {
 
 	setCachedMasterKey("")
 }
+
+// Test_SSHSIndependentCipherVector pins the shared ENC(v1:...) wire format with
+// a vector generated outside this repository; the desktop app decrypts the same
+// bytes, so password and passphrase stay exchangeable between both tools.
+func Test_SSHSIndependentCipherVector(t *testing.T) {
+	const vector = "ENC(v1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGzBwm4KdhDywBFjbFtwD3t9CX1iVbrt6NL0qASPPQPkqj-cg)"
+	plain, err := DecryptPassword(vector, "sshs-compat-master")
+	if err != nil {
+		t.Fatalf("DecryptPassword(vector) failed: %v", err)
+	}
+	if plain != "兼容-password-✓" {
+		t.Fatalf("plaintext = %q", plain)
+	}
+}

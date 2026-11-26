@@ -211,3 +211,73 @@ func Test_checkDoctorIssuesJumperValidation(t *testing.T) {
 		t.Fatalf("expected circular jumper issue, got: %#v", issuesCycle)
 	}
 }
+
+func Test_checkDoctorIssuesEncryptedPassphrase(t *testing.T) {
+	setCachedMasterKey("")
+	mock := &mockKeyring{data: make(map[string]string)}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+
+	masterKey := "doctor-passphrase-master"
+	mock.data["sshs/master-key"] = masterKey
+	validEnc, err := EncryptPassword("key-phrase", masterKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := []Config{
+		{Name: "valid-enc", Host: "10.0.0.1", Passphrase: validEnc},
+		{Name: "corrupt-enc", Host: "10.0.0.2", Passphrase: "ENC(v1:invalid-base64-payload)"},
+	}
+	issues := checkDoctorIssues(cfg)
+	if len(issues) != 1 {
+		t.Fatalf("expected 1 issue for corrupt passphrase ciphertext, got %d: %#v", len(issues), issues)
+	}
+	if !strings.Contains(issues[0].Message, "corrupt-enc") || !strings.Contains(issues[0].Message, "failed to decrypt passphrase") {
+		t.Fatalf("unexpected issue message: %s", issues[0].Message)
+	}
+
+	delete(mock.data, "sshs/master-key")
+	setCachedMasterKey("")
+	issuesNoKey := checkDoctorIssues([]Config{{Name: "no-key", Host: "10.0.0.3", Passphrase: validEnc}})
+	if len(issuesNoKey) != 1 || !strings.Contains(issuesNoKey[0].Message, "encrypted passphrase present but master key is not configured") {
+		t.Fatalf("expected master key missing issue, got: %#v", issuesNoKey)
+	}
+}
+
+// Doctor must decrypt an encrypted passphrase before parsing the key; using the
+// ciphertext as a literal would report a parse failure instead.
+func Test_checkDoctorIssuesUsesDecryptedEncryptedPassphrase(t *testing.T) {
+	setCachedMasterKey("")
+	masterKey := "doctor-encrypted-passphrase-master"
+	encPassphrase, err := EncryptPassword("real-key-passphrase", masterKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := ssh.MarshalPrivateKeyWithPassphrase(priv, "", []byte("real-key-passphrase"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(t.TempDir(), "id_ed25519")
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(block), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := []Config{{Name: "enc-passphrase", Host: "10.0.0.1", KeyPath: keyPath, Passphrase: encPassphrase}}
+
+	setCachedMasterKey(masterKey)
+	if issues := checkDoctorIssues(cfg); len(issues) != 0 {
+		t.Fatalf("decrypted passphrase was not used for key parsing: %#v", issues)
+	}
+
+	setCachedMasterKey("wrong-master")
+	issues := checkDoctorIssues(cfg)
+	if len(issues) != 1 || !strings.Contains(issues[0].Message, "failed to decrypt passphrase") {
+		t.Fatalf("wrong master did not surface a decrypt issue: %#v", issues)
+	}
+	setCachedMasterKey("")
+}

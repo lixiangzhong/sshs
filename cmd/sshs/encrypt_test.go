@@ -14,30 +14,30 @@ func Test_EncryptAndDecryptYAMLPreservesFormattingAndComments(t *testing.T) {
 	masterKey := "super-master-key-99"
 
 	originalYAML := `- { name: server1, host: 10.10.0.1, password: 123456 } # 默认 user: root, port: 22
-- { name: server2, host: 10.10.0.2, port: 2222, user: root, password: "my-quote-pass" }
+- { name: server2, host: 10.10.0.2, port: 2222, user: root, password: "my-quote-pass", passphrase: "key-phrase" }
 - {
     name: server3,
     host: 10.10.0.3,
     password: 'single-quote-pass',
-    jumper: { host: 10.10.0.1, password: jumper-pass },
+    jumper: { host: 10.10.0.1, password: jumper-pass, passphrase: jumper-key-phrase },
   } # 使用跳板机
 - name: group1
   children:
     - { name: server4, host: 10.10.0.4, password: pass4 }
 `
 
-	// 1. 加密
-	encryptedYAML, count, err := EncryptPasswordInYAML([]byte(originalYAML), masterKey)
+	// 1. 加密（登录密码与私钥口令都在同一遍扫描中处理）
+	encryptedYAML, count, err := EncryptSecretsInYAML([]byte(originalYAML), masterKey)
 	if err != nil {
-		t.Fatalf("EncryptPasswordInYAML failed: %v", err)
+		t.Fatalf("EncryptSecretsInYAML failed: %v", err)
 	}
-	if count != 5 {
-		t.Fatalf("encrypted count = %d, want 5", count)
+	if count != 7 {
+		t.Fatalf("encrypted count = %d, want 7", count)
 	}
 
 	encryptedStr := string(encryptedYAML)
-	// 验证明文密码均已被替换
-	for _, plain := range []string{"123456", "my-quote-pass", "single-quote-pass", "jumper-pass", "pass4"} {
+	// 验证明文密码与私钥口令均已被替换
+	for _, plain := range []string{"123456", "my-quote-pass", "single-quote-pass", "jumper-pass", "pass4", "key-phrase", "jumper-key-phrase"} {
 		if strings.Contains(encryptedStr, plain) {
 			t.Fatalf("encrypted YAML still contains plaintext %q", plain)
 		}
@@ -55,25 +55,25 @@ func Test_EncryptAndDecryptYAMLPreservesFormattingAndComments(t *testing.T) {
 	}
 
 	// 2. 再次执行加密，应跳过已加密字段 (count == 0)
-	_, recount, err := EncryptPasswordInYAML(encryptedYAML, masterKey)
+	_, recount, err := EncryptSecretsInYAML(encryptedYAML, masterKey)
 	if err != nil {
-		t.Fatalf("second EncryptPasswordInYAML failed: %v", err)
+		t.Fatalf("second EncryptSecretsInYAML failed: %v", err)
 	}
 	if recount != 0 {
 		t.Fatalf("second encryption count = %d, want 0", recount)
 	}
 
 	// 3. 解密还原
-	decryptedYAML, decCount, err := DecryptPasswordInYAML(encryptedYAML, masterKey)
+	decryptedYAML, decCount, err := DecryptSecretsInYAML(encryptedYAML, masterKey)
 	if err != nil {
-		t.Fatalf("DecryptPasswordInYAML failed: %v", err)
+		t.Fatalf("DecryptSecretsInYAML failed: %v", err)
 	}
-	if decCount != 5 {
-		t.Fatalf("decrypted count = %d, want 5", decCount)
+	if decCount != 7 {
+		t.Fatalf("decrypted count = %d, want 7", decCount)
 	}
 
 	decryptedStr := string(decryptedYAML)
-	for _, plain := range []string{"123456", "my-quote-pass", "single-quote-pass", "jumper-pass", "pass4"} {
+	for _, plain := range []string{"123456", "my-quote-pass", "single-quote-pass", "jumper-pass", "pass4", "key-phrase", "jumper-key-phrase"} {
 		if !strings.Contains(decryptedStr, plain) {
 			t.Fatalf("decrypted YAML missing plain text %q", plain)
 		}

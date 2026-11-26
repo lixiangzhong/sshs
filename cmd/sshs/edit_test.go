@@ -20,8 +20,12 @@ func Test_EditActionShowsDecryptedAndSavesEncrypted(t *testing.T) {
 	dir := t.TempDir()
 	configFile := filepath.Join(dir, ".sshs.yaml")
 
-	// 初始文件包含 ENC(v1:...) 加密密码
+	// 初始文件包含 ENC(v1:...) 加密的密码与私钥口令
 	encPass, err := EncryptPassword("secret-edit-pass-1", "edit-test-master-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encPhrase, err := EncryptPassword("secret-key-phrase-1", "edit-test-master-key")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +33,8 @@ func Test_EditActionShowsDecryptedAndSavesEncrypted(t *testing.T) {
 	initialYAML := fmt.Sprintf(`- name: server1
   host: 10.0.0.1
   password: %q
-`, encPass)
+  passphrase: %q
+`, encPass, encPhrase)
 
 	if err := os.WriteFile(configFile, []byte(initialYAML), 0600); err != nil {
 		t.Fatal(err)
@@ -61,9 +66,13 @@ func Test_EditActionShowsDecryptedAndSavesEncrypted(t *testing.T) {
 set -e
 TARGET="$1"
 
-# 检查明文已解密
+# 检查明文已解密（密码与私钥口令都要还原）
 if ! grep -q "secret-edit-pass-1" "$TARGET"; then
   echo "Error: decrypted plaintext not found in temp file" >&2
+  exit 1
+fi
+if ! grep -q "secret-key-phrase-1" "$TARGET"; then
+  echo "Error: decrypted passphrase not found in temp file" >&2
   exit 1
 fi
 if grep -q "ENC(v1:" "$TARGET"; then
@@ -71,11 +80,12 @@ if grep -q "ENC(v1:" "$TARGET"; then
   exit 1
 fi
 
-# 模拟用户追加带有明文密码的新节点
+# 模拟用户追加带有明文密码与私钥口令的新节点
 cat << 'EOF' >> "$TARGET"
 - name: server2
   host: 10.0.0.2
   password: "secret-edit-pass-2"
+  passphrase: "secret-key-phrase-2"
 EOF
 `
 	if err := os.WriteFile(mockEditorScript, []byte(scriptContent), 0755); err != nil {
@@ -111,21 +121,26 @@ EOF
 	if strings.Contains(finalContent, "secret-edit-pass-2") {
 		t.Fatalf("config file still contains plaintext pass2: %s", finalContent)
 	}
+	if strings.Contains(finalContent, "secret-key-phrase-1") || strings.Contains(finalContent, "secret-key-phrase-2") {
+		t.Fatalf("config file still contains plaintext passphrase: %s", finalContent)
+	}
 	if !strings.Contains(finalContent, "server1") || !strings.Contains(finalContent, "server2") {
 		t.Fatalf("config file missing hosts: %s", finalContent)
 	}
 
-	// 2. 解密验证两个密码值均正确无误
-	decryptedYAML, count, err := DecryptPasswordInYAML(finalBytes, "edit-test-master-key")
+	// 2. 解密验证两个密码与两个私钥口令均正确无误
+	decryptedYAML, count, err := DecryptSecretsInYAML(finalBytes, "edit-test-master-key")
 	if err != nil {
-		t.Fatalf("DecryptPasswordInYAML failed: %v", err)
+		t.Fatalf("DecryptSecretsInYAML failed: %v", err)
 	}
-	if count != 2 {
-		t.Fatalf("decrypted password count = %d, want 2", count)
+	if count != 4 {
+		t.Fatalf("decrypted secret count = %d, want 4", count)
 	}
 	decStr := string(decryptedYAML)
-	if !strings.Contains(decStr, "secret-edit-pass-1") || !strings.Contains(decStr, "secret-edit-pass-2") {
-		t.Fatalf("decrypted content does not match expected plaintexts: %s", decStr)
+	for _, plain := range []string{"secret-edit-pass-1", "secret-edit-pass-2", "secret-key-phrase-1", "secret-key-phrase-2"} {
+		if !strings.Contains(decStr, plain) {
+			t.Fatalf("decrypted content missing %q: %s", plain, decStr)
+		}
 	}
 
 	setCachedMasterKey("")

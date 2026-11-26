@@ -221,3 +221,41 @@ func Test_FailFastOnDecryptionError(t *testing.T) {
 	setCachedMasterKey("")
 }
 
+func Test_PassphraseValueDecryptsEncryptedSecret(t *testing.T) {
+	setCachedMasterKey("")
+	mock := &mockKeyring{data: map[string]string{"sshs/master-key": "passphrase-master"}}
+	oldKeyring := activeKeyring
+	activeKeyring = mock
+	defer func() { activeKeyring = oldKeyring }()
+
+	encrypted, err := EncryptPassword("key-phrase", "passphrase-master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "empty", raw: "", want: ""},
+		{name: "plaintext", raw: "legacy-plain", want: "legacy-plain"},
+		{name: "ciphertext", raw: encrypted, want: "key-phrase"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			config := &Config{Name: "web", Passphrase: testCase.raw}
+			got, err := config.PassphraseValue()
+			if err != nil || got != testCase.want {
+				t.Fatalf("PassphraseValue() = %q, %v, want %q", got, err, testCase.want)
+			}
+		})
+	}
+
+	setCachedMasterKey("")
+	mock.data["sshs/master-key"] = "wrong-master"
+	wrong := &Config{Name: "web", Passphrase: encrypted}
+	if _, err := wrong.PassphraseValue(); err == nil {
+		t.Fatal("expected decryption error with a different master key")
+	}
+	setCachedMasterKey("")
+}

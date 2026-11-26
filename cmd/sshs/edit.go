@@ -36,7 +36,7 @@ func EditAction(c *cli.Context) error {
 	// 2. 若配置中包含密文，使用手动输入的 Master Key 解密；若口令错误直接拦截退出
 	editContent := b
 	if strings.Contains(string(b), "ENC(v1:") {
-		decrypted, _, err := DecryptPasswordInYAML(b, masterKey)
+		decrypted, _, err := DecryptSecretsInYAML(b, masterKey)
 		if err != nil {
 			return cli.Exit(fmt.Sprintf("failed to decrypt config: %v", err), 1)
 		}
@@ -49,9 +49,9 @@ func EditAction(c *cli.Context) error {
 		return err
 	}
 
-	// 4. 用户保存退出后，立即使用该 Master Key 将所有明文密码重新全量加密
+	// 4. 用户保存退出后，立即使用该 Master Key 将所有明文密码与私钥口令重新全量加密
 	toWrite := edited
-	if encrypted, _, err := EncryptPasswordInYAML(edited, masterKey); err == nil {
+	if encrypted, _, err := EncryptSecretsInYAML(edited, masterKey); err == nil {
 		toWrite = encrypted
 	}
 

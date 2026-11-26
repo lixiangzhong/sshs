@@ -65,8 +65,11 @@ func checkDoctorIssues(cfg []Config) []doctorIssue {
 			issues = append(issues, *issue)
 		}
 
-		// 私钥文件有效性与权限校验
-		if issue := checkKeyPath(name, h.KeyPath, h.Passphrase); issue != nil {
+		// 私钥文件有效性与权限校验（passphrase 先按 ENC 规则解密）
+		passphrase, passErr := resolvedSecret(h.Passphrase, "passphrase")
+		if passErr != nil {
+			issues = append(issues, doctorIssue{Message: fmt.Sprintf("host %s: %v", name, passErr)})
+		} else if issue := checkKeyPath(name, h.KeyPath, passphrase); issue != nil {
 			issues = append(issues, *issue)
 		}
 
@@ -208,23 +211,31 @@ func checkEncryptedPassword(name, password string) *doctorIssue {
 	if !IsEncrypted(password) {
 		return nil
 	}
-	masterKey := getCachedMasterKey()
-	if masterKey == "" {
-		key, _ := LoadMasterKey()
-		if key == "" {
-			return &doctorIssue{
-				Message: fmt.Sprintf("host %s: encrypted password present but master key is not configured (keyring, file or %s)", name, masterKeyEnv),
-			}
-		}
-		masterKey = key
-	}
-	_, err := DecryptPassword(password, masterKey)
-	if err != nil {
-		return &doctorIssue{
-			Message: fmt.Sprintf("host %s: failed to decrypt password: %v", name, err),
-		}
+	if _, err := resolvedSecret(password, "password"); err != nil {
+		return &doctorIssue{Message: fmt.Sprintf("host %s: %v", name, err)}
 	}
 	return nil
+}
+
+// resolvedSecret turns one stored credential into the plaintext used for real
+// authentication checks. Plaintext stays as-is; ENC(v1:...) needs the master key
+// from the process cache, keyring or master-key file.
+func resolvedSecret(raw, kind string) (string, error) {
+	if !IsEncrypted(raw) {
+		return raw, nil
+	}
+	masterKey := getCachedMasterKey()
+	if masterKey == "" {
+		masterKey, _ = LoadMasterKey()
+	}
+	if masterKey == "" {
+		return "", fmt.Errorf("encrypted %s present but master key is not configured (keyring, file or %s)", kind, masterKeyEnv)
+	}
+	plain, err := DecryptPassword(raw, masterKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt %s: %v", kind, err)
+	}
+	return plain, nil
 }
 
 func checkJumperChain(hostName string, jumper *Config, visited map[string]bool) []doctorIssue {
@@ -257,7 +268,10 @@ func checkJumperChain(hostName string, jumper *Config, visited map[string]bool) 
 		if issue := checkPort(jName, curr.Port); issue != nil {
 			issues = append(issues, *issue)
 		}
-		if issue := checkKeyPath(jName, curr.KeyPath, curr.Passphrase); issue != nil {
+		passphrase, passErr := resolvedSecret(curr.Passphrase, "passphrase")
+		if passErr != nil {
+			issues = append(issues, doctorIssue{Message: fmt.Sprintf("%s: %v", jName, passErr)})
+		} else if issue := checkKeyPath(jName, curr.KeyPath, passphrase); issue != nil {
 			issues = append(issues, *issue)
 		}
 		if issue := checkEncryptedPassword(jName, curr.Password); issue != nil {

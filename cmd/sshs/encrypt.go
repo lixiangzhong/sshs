@@ -31,14 +31,18 @@ func (v *yamlNodeVisitor) Visit(node ast.Node) ast.Visitor {
 	return v
 }
 
-func isPasswordKeyNode(key ast.Node) bool {
+// isSecretKeyNode reports whether a YAML key holds an encrypted-at-rest
+// credential. Login passwords and private-key passphrases share the same
+// ENC(v1:...) format, so both are rewritten by the same visitor.
+func isSecretKeyNode(key ast.Node) bool {
 	if key == nil {
 		return false
 	}
-	if sn, ok := key.(*ast.StringNode); ok && sn.Value == "password" {
+	isSecret := func(value string) bool { return value == "password" || value == "passphrase" }
+	if sn, ok := key.(*ast.StringNode); ok && isSecret(sn.Value) {
 		return true
 	}
-	if tk := key.GetToken(); tk != nil && tk.Value == "password" {
+	if tk := key.GetToken(); tk != nil && isSecret(tk.Value) {
 		return true
 	}
 	return false
@@ -66,9 +70,9 @@ func extractNodeValue(node ast.Node) string {
 	}
 }
 
-// EncryptPasswordInYAML 扫描 YAML 内容中的所有明文 password 字段并加密为 ENC(v1:...)。
+// EncryptSecretsInYAML 扫描 YAML 内容中的所有明文 password 与 passphrase 字段并加密为 ENC(v1:...)。
 // 使用 goccy/go-yaml AST 重写节点，保留原始文件的注释与格式。
-func EncryptPasswordInYAML(content []byte, masterKey string) ([]byte, int, error) {
+func EncryptSecretsInYAML(content []byte, masterKey string) ([]byte, int, error) {
 	if masterKey == "" {
 		return nil, 0, errors.New("master key cannot be empty")
 	}
@@ -82,7 +86,7 @@ func EncryptPasswordInYAML(content []byte, masterKey string) ([]byte, int, error
 	visitor := &yamlNodeVisitor{
 		visit: func(node ast.Node) error {
 			mv, ok := node.(*ast.MappingValueNode)
-			if !ok || !isPasswordKeyNode(mv.Key) {
+			if !ok || !isSecretKeyNode(mv.Key) {
 				return nil
 			}
 
@@ -117,9 +121,9 @@ func EncryptPasswordInYAML(content []byte, masterKey string) ([]byte, int, error
 	return []byte(file.String()), count, nil
 }
 
-// DecryptPasswordInYAML 扫描 YAML 内容中的所有 ENC(v1:...) 密码并解密为明文。
+// DecryptSecretsInYAML 扫描 YAML 内容中的所有 ENC(v1:...) password 与 passphrase 并解密为明文。
 // 使用 goccy/go-yaml AST 重写节点，保留原始文件的注释与格式。
-func DecryptPasswordInYAML(content []byte, masterKey string) ([]byte, int, error) {
+func DecryptSecretsInYAML(content []byte, masterKey string) ([]byte, int, error) {
 	if masterKey == "" {
 		return nil, 0, errors.New("master key cannot be empty")
 	}
@@ -133,7 +137,7 @@ func DecryptPasswordInYAML(content []byte, masterKey string) ([]byte, int, error
 	visitor := &yamlNodeVisitor{
 		visit: func(node ast.Node) error {
 			mv, ok := node.(*ast.MappingValueNode)
-			if !ok || !isPasswordKeyNode(mv.Key) {
+			if !ok || !isSecretKeyNode(mv.Key) {
 				return nil
 			}
 
@@ -257,7 +261,7 @@ func AutoEncryptAction(c *cli.Context) error {
 		return nil
 	}
 
-	newContent, count, err := EncryptPasswordInYAML(raw, masterKey)
+	newContent, count, err := EncryptSecretsInYAML(raw, masterKey)
 	if err != nil || count == 0 {
 		return nil
 	}
@@ -266,7 +270,7 @@ func AutoEncryptAction(c *cli.Context) error {
 		return err
 	}
 
-	fmt.Printf("Successfully encrypted %d plaintext password(s) in %s\n", count, configPath)
+	fmt.Printf("Successfully encrypted %d plaintext secret(s) in %s\n", count, configPath)
 	return nil
 }
 

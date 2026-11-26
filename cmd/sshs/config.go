@@ -94,6 +94,24 @@ func (c *Config) PasswordValue() (string, error) {
 	return plain, nil
 }
 
+// PassphraseValue 返回生效的私钥口令及可能发生的解密错误：
+// 1. 若配置中包含 ENC(v1:...) 密文，则尝试使用 Master Key 解密；若解密失败直接返回错误；
+// 2. 明文口令直接返回，保持对旧配置的兼容。
+func (c *Config) PassphraseValue() (string, error) {
+	if c.Passphrase == "" || !IsEncrypted(c.Passphrase) {
+		return c.Passphrase, nil
+	}
+	masterKey, err := ResolveMasterKey()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve master key: %w", err)
+	}
+	plain, err := DecryptPassword(c.Passphrase, masterKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt passphrase for host %q: %w", c.Name, err)
+	}
+	return plain, nil
+}
+
 func (c *Config) RemotePort() int {
 	if c.Port <= 0 {
 		return 22
@@ -112,7 +130,11 @@ func (c *Config) AuthMethod() ([]ssh.AuthMethod, error) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			auth = append(auth, secureshell.KeyAuth(b, c.Passphrase))
+			passphrase, err := c.PassphraseValue()
+			if err != nil {
+				return nil, err
+			}
+			auth = append(auth, secureshell.KeyAuth(b, passphrase))
 		}
 	}
 	password, err := c.PasswordValue()

@@ -31,7 +31,7 @@ func checkHasStdin() bool {
 // promptCiphertextFromTTY 从控制终端提示并读取待解密的 ENC(v1:...) 密文。
 // 提示语输出至 os.Stderr，保证 stdout 仅包含解密后的明文结果。
 func promptCiphertextFromTTY() (string, error) {
-	promptText := "Enter Encrypted Password (ENC(v1:...)): "
+	promptText := "Enter Encrypted Secret (ENC(v1:...)): "
 
 	// 1. 优先尝试从 /dev/tty 读取
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
@@ -42,11 +42,11 @@ func promptCiphertextFromTTY() (string, error) {
 			reader := bufio.NewReader(tty)
 			line, err := reader.ReadString('\n')
 			if err != nil && !errors.Is(err, io.EOF) {
-				return "", fmt.Errorf("read encrypted password: %w", err)
+				return "", fmt.Errorf("read encrypted secret: %w", err)
 			}
 			text := strings.TrimSpace(line)
 			if text == "" {
-				return "", errors.New("encrypted password cannot be empty")
+				return "", errors.New("encrypted secret cannot be empty")
 			}
 			return text, nil
 		}
@@ -59,16 +59,16 @@ func promptCiphertextFromTTY() (string, error) {
 		reader := bufio.NewReader(os.Stdin)
 		line, err := reader.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
-			return "", fmt.Errorf("read encrypted password: %w", err)
+			return "", fmt.Errorf("read encrypted secret: %w", err)
 		}
 		text := strings.TrimSpace(line)
 		if text == "" {
-			return "", errors.New("encrypted password cannot be empty")
+			return "", errors.New("encrypted secret cannot be empty")
 		}
 		return text, nil
 	}
 
-	return "", errors.New("interactive terminal (/dev/tty) required to input encrypted password")
+	return "", errors.New("interactive terminal (/dev/tty) required to input encrypted secret")
 }
 
 // promptMasterKeyFromTTY 强制从终端控制设备 (/dev/tty) 手动读取主密码。
@@ -123,7 +123,7 @@ func DecryptContent(data []byte, masterKey string) ([]byte, error) {
 		return data, nil
 	}
 
-	decrypted, _, err := DecryptPasswordInYAML(data, masterKey)
+	decrypted, _, err := DecryptSecretsInYAML(data, masterKey)
 	if err != nil {
 		return nil, err
 	}
